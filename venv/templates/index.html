@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}Accueil - School Planner{% endblock %}
+
+{% block content %}
+<div class="text-center">
+  <h1 class="mb-3">Bienvenue dans School Planner</h1>
+  <p class="lead">
+    Application web pour gérer les devoirs et la charge de travail des élèves.
+  </p>
+  <div class="mt-4">
+    <a href="{{ url_for('planning') }}" class="btn btn-primary btn-lg me-2">
+      Voir le planning de la semaine
+    </a>
+    <a href="{{ url_for('devoirs_list') }}" class="btn btn-outline-primary btn-lg">
+      Gérer les devoirs
+    </a>
+  </div>
+</div>
+{% endblock %}

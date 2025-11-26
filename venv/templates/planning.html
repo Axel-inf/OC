@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Planning de la semaine{% endblock %}
+
+{% block content %}
+<h2 class="mb-3">Planning de la semaine</h2>
+
+<p class="text-muted">
+  De {{ days[0].strftime('%d.%m.%Y') }} à {{ days[-1].strftime('%d.%m.%Y') }}
+</p>
+
+<div class="row row-cols-1 row-cols-md-3 g-3">
+  {% for day in days %}
+  {% set data = planning_data.get(day) %}
+  <div class="col">
+    <div class="card h-100">
+      <div class="card-header">
+        <strong>{{ day.strftime('%A %d.%m')|capitalize }}</strong>
+      </div>
+      <div class="card-body">
+        {% if data %}
+          <p class="fw-semibold">
+            Charge totale : {{ data.total_minutes }} min
+          </p>
+          <ul class="list-unstyled">
+            {% for d in data.devoirs %}
+            <li class="mb-2">
+              <span class="badge bg-primary">{{ d.course.name }}</span><br />
+              <strong>{{ d.title }}</strong><br />
+              <small class="text-muted">{{ d.estimated_minutes }} min</small>
+            </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="text-muted mb-0">Aucun devoir pour ce jour.</p>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}
