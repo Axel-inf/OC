@@ -5,12 +5,18 @@ def create_navbar():
     
     ui.add_head_html('''
         <style>
+            :root {
+                --primary: #4E7ED2;
+                --secondary: #9BB1E5;
+                --tertiary: #BCCBF0;
+            }
+            
             .navbar-container {
                 position: fixed;
                 bottom: 0;
                 left: 0;
                 right: 0;
-                background: white;
+                background: var(--primary);
                 box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
                 z-index: 1000;
             }
@@ -32,22 +38,24 @@ def create_navbar():
                 transition: background 0.2s;
             }
             .nav-item:hover {
-                background: rgba(102, 126, 234, 0.1);
+                background: rgba(255, 255, 255, 0.2);
             }
             .nav-item.active {
-                background: rgba(102, 126, 234, 0.15);
+                background: rgba(255, 255, 255, 0.3);
             }
             .nav-icon {
                 font-size: 24px;
                 margin-bottom: 4px;
+                color: white;
             }
             .nav-label {
                 font-size: 12px;
                 font-weight: 500;
+                color: white;
             }
             .nav-item.active .nav-icon,
             .nav-item.active .nav-label {
-                color: #667eea;
+                color: white;
             }
         </style>
     ''')

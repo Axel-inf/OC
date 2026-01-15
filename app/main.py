@@ -8,7 +8,9 @@ from config.settings import APP_NAME, SECRET_KEY
 init_database()
 
 # Configuration de l'application
-app.add_static_files('/static', 'static')
+# Utiliser le chemin absolu pour servir les fichiers statiques
+static_path = os.path.join(os.path.dirname(__file__), 'static')
+app.add_static_files('/static', static_path)
 
 # Variable de session pour l'utilisateur connecté
 @ui.page('/')
