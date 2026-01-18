@@ -1,1 +1,334 @@
-/* Styles personnalisés */
+/* ========== aide de l'IA ========== */
+
+/* ========== VARIABLES DE COULEURS ========== */
+:root {
+    --primary: #4E7ED2;
+    --secondary: #9BB1E5;
+    --tertiary: #BCCBF0;
+    --white: #ffffff;
+    --text-dark: #333333;
+    --text-light: #666666;
+    --border-light: #e0e0e0;
+}
+
+/* ========== RESET ========== */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--white);
+}
+
+
+/* ========== PAGE DE CALENDRIER ========== */
+
+
+/* ========== CONTAINER PRINCIPAL ========== */
+.page-container {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-bottom: 80px;
+    overflow-y: auto;
+    gap: 20px;
+    padding-top: 20px;
+}
+
+/* ========== CONTAINER 1 : TITRE ========== */
+.titre-container {
+    width: 290px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-weight: 700;
+    font-size: 32px;
+    color: var(--text-dark);
+    margin-top: 10px;
+}
+
+/* ========== CONTAINER 2 : BARRE CHARGE DE TRAVAIL ========== */
+.charge-travail-container {
+    width: 370px;
+    height: 32px;
+    background-color: var(--primary);
+    border-radius: 16px;
+    display: flex;
+    justify-content: center;
+    color: var(--white);
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* ========== CONTAINER 3 : LISTE DES JOURS ========== */
+.days-list-container {
+    width: 370px;
+    display: flex;
+    flex-direction: column;
+    align-content: center;
+    gap: 20px;
+}
+
+/* ========== CONTAINER 4 : UN JOUR (RÉPÉTABLE) ========== */
+.day-container {
+    width: 370px;
+    display: flex;
+    flex-direction: column;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+/* ========== CONTAINER 4.1 : EN-TÊTE DU JOUR ========== */
+.day-header-container {
+    width: 370px;
+    height: 59px;
+    background-color: var(--primary);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--white);
+    font-weight: 600;
+    font-size: 16px;
+}
+
+/* ========== CONTAINER 4.2 : CONTENU DU JOUR ========== */
+.day-content-container {
+    width: 370px;
+    background-color: var(--tertiary);
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+/* VARIANTE VIDE */
+.day-content-container.empty {
+    height: 38px;
+    justify-content: center;
+    background-color: var(--tertiary);
+    border: 1px solid var(--border-light);
+    color: var(--text-light);
+    font-size: 14px;
+    padding: 0;
+}
+
+/* ========== CONTAINER 4.2.1 : TEMPS TOTAL ========== */
+.total-time-container {
+    width: 100%;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--text-dark);
+    text-align: left;
+}
+
+/* ========== CONTAINER 4.2.2 : LISTE DEVOIRS ========== */
+.homework-list-container {
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+/* ========== CONTAINER 4.2.2.1 : CARD DEVOIR (RÉPÉTABLE) ========== */
+.homework-card-container {
+    width: 320px;
+    height: auto;
+    background-color: var(--primary);
+    border-radius: 15px;
+    padding: 12px;
+    color: var(--white);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.homework-card-container .subject {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.homework-card-container .description {
+    font-size: 13px;
+    opacity: 0.95;
+}
+
+.homework-card-container .time-info {
+    font-size: 12px;
+    opacity: 0.9;
+}
+
+/* ========== CONTAINER 4.2.2.2 : SÉPARATEUR ========== */
+.separator {
+    width: 373px;
+    height: 1px;
+    background-color: rgba(0, 0, 0, 0.2);
+    margin: 5px auto;
+}
+
+/* ========== CONTAINER 4.2.3 : LISTE EXAMENS ========== */
+.exams-list-container {
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+/* ========== CONTAINER 4.2.3.1 : CARD EXAMEN (RÉPÉTABLE) ========== */
+.exam-card-container {
+    width: 320px;
+    min-height: 98px;
+    background-color: var(--primary);
+    border-radius: 15px;
+    padding: 12px;
+    color: var(--white);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.exam-card-container .subject {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.exam-card-container .description {
+    font-size: 13px;
+    opacity: 0.95;
+}
+
+.exam-card-container .time-info {
+    font-size: 12px;
+    opacity: 0.9;
+}
+
+/* ========== CONTAINER 5 : BOUTON AJOUTER ========== */
+.add-button-container {
+    width: 370px;
+    height: 44px;
+    background-color: var(--primary);
+    border-radius: 22px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: var(--white);
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    margin-top: 20px;
+    border: none;
+    transition: all 0.3s ease;
+}
+
+.add-button-container:hover {
+    background-color: #5569d8;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.add-button-container:active {
+    transform: translateY(0);
+}
+
+/* ========== CONTAINER 6 : NAVBAR (FIXED) ========== */
+.navbar-container {
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+    height: 70px;
+    background-color: var(--white);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+}
+
+/* ========== CONTAINER 6.1 : ONGLET NAVBAR (RÉPÉTABLE) ========== */
+.nav-item-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    color: var(--text-light);
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.nav-item-container:hover {
+    color: var(--primary);
+}
+
+.nav-item-container.active {
+    color: var(--primary);
+    font-weight: 600;
+}
+
+.nav-item-container i {
+    font-size: 24px;
+}
+
+.nav-item-container span {
+    font-size: 11px;
+    text-align: center;
+}
+
+
+
+
+.page-container {
+    padding: 20px 0;
+    padding-bottom: 100px;
+    gap: 20px;
+}
+
+.titre-container {
+    width: 290px;
+    font-size: 30px;
+}
+
+.charge-travail-container {
+    width: 370px;
+    font-size: 14px;
+}
+
+.days-list-container {
+    width: 370px;
+}
+
+.day-header-container {
+    font-size: 16px;
+}
+
+.day-content-container {
+    padding: 15px;
+}
+
+.add-button-container {
+    width: 370px;
+    margin-top: 20px;
+}
+
+.navbar-container {
+    height: 70px;
+}
+
+
+
