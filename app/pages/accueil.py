@@ -7,6 +7,8 @@ from components.navbar import create_navbar
 def create():
     """Crée la page d'accueil"""
     
+    ui.add_head_html('<link rel="stylesheet" href="/static/css/custom.css">')
+
     ui.add_head_html('''
     <style>
         /* Reset */
@@ -31,6 +33,10 @@ def create():
             --secondary: #9BB1E5;
             --tertiary: #BCCBF0;
         }
+        .white-card-link, .white-card-link * {
+            cursor: pointer;
+        }
+
 
         /* Container principal */
         .accueil-container {
@@ -42,7 +48,7 @@ def create():
             background-attachment: fixed;
             position: relative;
             margin: 0;
-            padding: 0;
+            padding: 7vh 0px 0px 0px;
             width: 100%;
             display: flex;
             flex-direction: column;
@@ -58,17 +64,13 @@ def create():
             text-align: center;
             display: flex;
             flex-direction: column;
-            /* packer les éléments en haut pour éviter un grand vide */
             justify-content: flex-start;
             align-items: center;
             position: relative;
             z-index: 2;
             width: 100%;
-            /* permettre le scroll interne si nécessaire */
             overflow-y: auto;
-            /* espace réservé au bas = hauteur du footer bleu + 32px */
-            padding: 0 20px calc(43.7vh + 32px) 20px;
-            gap: 2vh;
+            padding: 0 20px 12px 20px;
         }
 
         /* Titre */
@@ -127,15 +129,15 @@ def create():
             bottom: 0;
             left: 0;
             right: 0;
-            height: 43.7vh;
+            height: 45vh;
             background: rgba(78, 126, 210, 0.66);
             border-top-left-radius: 32px;
             border-top-right-radius: 32px;
-            z-index: 1;
+            z-index: 5;
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 6vh 34px 3vh 34px;
+            padding: 3vh 34px 3vh 34px;
             overflow: visible;
             gap: 3.1vh;
         }
@@ -150,6 +152,13 @@ def create():
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             position: relative;
             z-index: 3;
+        }
+        .white-card-link {
+            display: block;
+            color: inherit;
+            text-decoration: none;
+            cursor: pointer;
+
         }
 
         .white-card div {
@@ -170,7 +179,7 @@ def create():
         /* Navbar */
         .navbar-container {
             position: relative;
-            z-index: 3;
+            z-index: 10;
             margin-top: auto;
             padding-bottom: 8px;
             flex-shrink: 0;
@@ -199,28 +208,31 @@ def create():
                 ).props('color=primary').classes('action-button')
         
         # Rectangle bleu en bas (container pour les rectangles blancs)
+
         with ui.element('div').classes('blue-footer'):
-            # Rectangle blanc "Ajouter un événement"
-            with ui.card().classes('white-card'):
-                ui.html('''
-                    <div style="text-align: center; font-size: 16px; font-weight: 600; margin-bottom: 6px; width: 100%;">
-                        Ajouter un événement à votre calendrier
-                    </div>
-                ''', sanitize=False)
-                ui.icon('calendar_month', size='32px').style('display: block; margin-left: auto; margin-right: auto;')
-            
-            # Rectangle blanc "Statistiques"
-            with ui.card().classes('white-card'):
-                ui.html('''
-                    <div style="text-align: center; font-size: 16px; font-weight: 600; margin-bottom: 6px; width: 100%;">
-                        Jeter un coup d'œil aux statistiques
-                    </div>
-                ''', sanitize=False)
-                ui.icon('bar_chart', size='32px').style('display: block; margin-left: auto; margin-right: auto;')
+
+            with ui.element('div').classes('white-card white-card-link').on(
+                'click', lambda: ui.navigate.to('/calendrier')
+            ):
+                ui.label("Ajouter un événement à votre calendrier") \
+                    .style('display:block; text-align:center; font-size:16px; font-weight:600; margin-bottom:8px;')
+
+                ui.icon('calendar_month', size='32px') \
+                    .style('display:block; margin: 0 auto;')
+
+
+            with ui.element('div').classes('white-card white-card-link').on(
+                'click', lambda: ui.navigate.to('/statistiques')
+            ):
+                ui.label("Jeter un coup d'œil aux statistiques") \
+                    .style('display:block; text-align:center; font-size:16px; font-weight:600; margin-bottom:8px;')
+
+                ui.icon('bar_chart', size='32px') \
+                    .style('display:block; margin: 0 auto;')
+
+
+
         
         # Barre de navigation
         with ui.column().classes('navbar-container'):
             create_navbar()
-
-
-

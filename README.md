@@ -236,5 +236,3 @@ ui.run(port=8081)  # Au lieu de 8080
 Projet développé pour le Collège du Sud.
 
 ---
-
-**Bon développement ! 🎓**
