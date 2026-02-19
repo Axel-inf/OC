@@ -1,78 +1,92 @@
+#aide de l'IA
 from nicegui import ui, app
+from utils.auth import authenticate_user
 
 def create():
     """Crée la page de connexion"""
-    
-    # Style personnalisé
+    ui.timer(0.05, lambda: ui.run_javascript('window.scrollTo(0, 0);'), once=True)
+    ui.add_head_html('<link rel="stylesheet" href="/static/css/custom.css">')
     ui.add_head_html('''
         <style>
             .login-container {
                 min-height: 100vh;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: var(--white);
+                padding: 20px 20px 32px 20px;
+                overflow-x: hidden;
             }
             .login-card {
-                background: white;
-                padding: 40px;
+                width: 370px;
+                max-width: 100%;
+                background: var(--white);
+                padding: 20px;
                 border-radius: 20px;
-                box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-                width: 100%;
-                max-width: 400px;
+                border: 1px solid var(--border-light);
+                box-shadow: 0 6px 20px rgba(0,0,0,0.08);
             }
             .login-icon {
-                width: 80px;
-                height: 80px;
-                background: #667eea;
+                width: 64px;
+                height: 64px;
+                background: var(--primary);
                 border-radius: 50%;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                margin: 0 auto 30px;
+                margin: 0 auto 12px;
             }
             .login-title {
                 text-align: center;
-                color: #333;
-                font-size: 24px;
-                font-weight: 600;
-                margin-bottom: 30px;
+                color: var(--text-dark);
+                font-size: 28px;
+                font-weight: 700;
+                margin-bottom: 16px;
             }
             .login-input {
                 width: 100%;
-                margin-bottom: 20px;
+                margin-bottom: 12px;
             }
             .login-button {
                 width: 100%;
-                background: #667eea;
-                color: white;
+                background: var(--primary);
+                color: var(--white);
                 padding: 12px;
                 border-radius: 8px;
                 font-weight: 600;
-                margin-top: 10px;
+                margin-top: 6px;
             }
             .login-links {
                 text-align: center;
-                margin-top: 20px;
+                margin-top: 14px;
                 font-size: 14px;
+                color: var(--text-light);
             }
             .login-links a {
-                color: #667eea;
+                color: var(--primary);
                 text-decoration: none;
+            }
+            .login-subtitle {
+                width: 100%;
+                height: 32px;
+                background-color: var(--secondary);
+                border-radius: 8px;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                color: var(--white);
+                font-size: 14px;
+                font-weight: 600;
+                margin-bottom: 16px;
             }
         </style>
     ''')
     
-    with ui.column().classes('login-container'):
+    with ui.column().classes('login-container items-center justify-start'):
         with ui.card().classes('login-card'):
-            # Icône de cadenas
             with ui.element('div').classes('login-icon'):
                 ui.icon('lock', size='48px', color='white')
-            
-            # Titre
+
             ui.html('<div class="login-title">Connexion</div>', sanitize=False)
+            ui.html('<div class="login-subtitle">Accès à votre espace</div>', sanitize=False)
             
-            # Formulaire
             email_input = ui.input(
                 label='Email',
                 placeholder='john@college.edu'
@@ -85,36 +99,34 @@ def create():
                 password_toggle_button=True
             ).classes('login-input').props('outlined')
             
-            # Case à cocher "Rester connecté"
             remember_checkbox = ui.checkbox('Rester connecté').classes('q-mb-md')
             
-            # Bouton de connexion
             async def handle_login():
-                # TODO: Implémenter la logique d'authentification avec la BD
                 email = email_input.value
                 password = password_input.value
-                
-                if email and password:
-                    # Simulation d'authentification (à remplacer par vraie logique)
+                if not email or not password:
+                    ui.notify('Veuillez remplir tous les champs', type='negative')
+                    return
+
+                user = authenticate_user(email, password)
+                if user:
                     app.storage.user['authenticated'] = True
-                    app.storage.user['email'] = email
-                    app.storage.user['role'] = 'eleve'  # À déterminer depuis la BD
-                    
+                    app.storage.user['email'] = user.email
+                    app.storage.user['role'] = user.role.value if hasattr(user.role, 'value') else user.role
+                    app.storage.user['user_id'] = user.id
+                    app.storage.user['nom'] = user.nom
+                    app.storage.user['prenom'] = user.prenom
                     ui.notify('Connexion réussie!', type='positive')
                     ui.navigate.to('/accueil')
                 else:
-                    ui.notify('Veuillez remplir tous les champs', type='negative')
+                    ui.notify('Email ou mot de passe incorrect', type='negative')
             
             ui.button('SE CONNECTER', on_click=handle_login).classes('login-button')
             
-            # Liens
             with ui.element('div').classes('login-links'):
                 ui.label('Pas de compte? ')
-                ui.link('Créer un compte', '/inscription').style('color: #667eea; font-weight: 600;')
+                ui.link('Créer un compte', '/inscription').style('color: var(--primary); font-weight: 600;')
                 ui.label(' | ')
-                ui.link('Mot de passe oublié?', '#').style('color: #667eea;')
+                ui.link('Mot de passe oublié?', '#').style('color: var(--primary);')
             
-            # Lien de retour
-            with ui.element('div').classes('login-links').style('margin-top: 30px;'):
-                ui.label('Déjà un compte? ')
-                ui.link('Pourquoi ne pas le créer?', '/inscription').style('color: #667eea; font-weight: 600;')
+            

@@ -1,3 +1,4 @@
+#aide de l'IA
 import os
 from nicegui import ui, app
 from database.database import init_database

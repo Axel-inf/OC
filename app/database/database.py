@@ -12,8 +12,4 @@ def init_database():
 
 def get_db() -> Session:
     """Retourne une session de base de données"""
-    db = SessionLocal()
-    try:
-        return db
-    finally:
-        db.close()
+    return SessionLocal()

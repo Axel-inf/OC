@@ -214,7 +214,7 @@ def create():
             with ui.element('div').classes('white-card white-card-link').on(
                 'click', lambda: ui.navigate.to('/calendrier')
             ):
-                ui.label("Ajouter un événement à votre calendrier") \
+                ui.label("Accéder à votre calendrier") \
                     .style('display:block; text-align:center; font-size:16px; font-weight:600; margin-bottom:8px;')
 
                 ui.icon('calendar_month', size='32px') \

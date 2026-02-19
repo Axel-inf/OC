@@ -1,8 +1,42 @@
+#aide de l'IA
 from nicegui import ui, app
 from components.navbar import create_navbar
+from database.database import get_db
+from database.models import Utilisateur, Enseignant
 
 def create():
     """Crée la page de profil pour un enseignant"""
+    user_id = app.storage.user.get('user_id')
+
+    nom_value = app.storage.user.get('nom', '')
+    prenom_value = app.storage.user.get('prenom', '')
+    email_value = app.storage.user.get('email', '')
+    classes_values: list[str] = []
+    branches_values: list[str] = []
+    os_value = ''
+    oc_value = ''
+    basic_english_value = False
+    bilingue_value = False
+
+    if user_id is not None:
+        db = get_db()
+        try:
+            user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
+            if user is not None:
+                nom_value = user.nom or nom_value
+                prenom_value = user.prenom or prenom_value
+                email_value = user.email or email_value
+
+            enseignant = db.query(Enseignant).filter(Enseignant.utilisateur_id == user_id).first()
+            if enseignant is not None:
+                classes_values = [item.strip() for item in (enseignant.classes or '').split(',') if item.strip()]
+                branches_values = [item.strip() for item in (enseignant.branches or '').split(',') if item.strip()]
+                os_value = enseignant.os or ''
+                oc_value = enseignant.oc or ''
+                basic_english_value = bool(enseignant.basic_english)
+                bilingue_value = bool(enseignant.bilingue)
+        finally:
+            db.close()
     
     ui.add_head_html('''
         <style>
@@ -53,9 +87,9 @@ def create():
             # Section Compte
             ui.html('<div class="section-title">Compte</div>', sanitize=False)
             
-            nom_input = ui.input('Nom', value='Martin').props('outlined').classes('w-full q-mb-md')
-            prenom_input = ui.input('Prénom', value='Sophie').props('outlined').classes('w-full q-mb-md')
-            email_input = ui.input('Email', value='sophie.martin@college.edu').props('outlined readonly').classes('w-full q-mb-md')
+            nom_input = ui.input('Nom', value=nom_value).props('outlined').classes('w-full q-mb-md')
+            prenom_input = ui.input('Prénom', value=prenom_value).props('outlined').classes('w-full q-mb-md')
+            email_input = ui.input('Email', value=email_value).props('outlined readonly').classes('w-full q-mb-md')
             
             # Section École
             ui.html('<div class="section-title">École</div>', sanitize=False)
@@ -65,16 +99,18 @@ def create():
             with classes_container:
                 ui.label('Mes classes').classes('text-subtitle2 text-grey-7 q-mb-sm')
                 with ui.row().classes('w-full gap-2'):
-                    ui.chip('9VG1', removable=False).props('color=primary')
-                    ui.chip('10VG1', removable=False).props('color=primary')
-                    ui.chip('11VG2', removable=False).props('color=primary')
+                    if classes_values:
+                        for classe in classes_values:
+                            ui.chip(classe, removable=False).props('color=primary')
+                    else:
+                        ui.chip('Aucune classe', removable=False).props('color=grey-6 text-color=white')
             
             # Branches enseignées
             branches_select = ui.select(
                 ['Mathématiques', 'Français', 'Allemand', 'Anglais', 'Histoire', 
                  'Géographie', 'Sciences', 'Physique', 'Chimie', 'Biologie'],
                 label='Branches enseignées',
-                value='Mathématiques',
+                value=branches_values,
                 multiple=True
             ).props('outlined').classes('w-full q-mb-md')
             
@@ -83,17 +119,17 @@ def create():
             
             os_input = ui.input(
                 'Option spécifique (OS)',
-                value='Physique-Applications'
+                value=os_value
             ).props('outlined').classes('w-full q-mb-md')
             
             oc_input = ui.input(
                 'Option complémentaire (OC)',
-                value='Arts visuels'
+                value=oc_value
             ).props('outlined').classes('w-full q-mb-md')
             
             with ui.column().classes('w-full gap-2'):
-                basic_english = ui.checkbox('Basic English', value=False)
-                bilingue = ui.checkbox('Cours bilingues', value=True)
+                basic_english = ui.checkbox('Basic English', value=basic_english_value)
+                bilingue = ui.checkbox('Cours bilingues', value=bilingue_value)
             
             # Section Cours complémentaires enseignés
             ui.html('<div class="section-title">Cours complémentaires</div>', sanitize=False)

@@ -1,3 +1,4 @@
+#aide de l'IA
 from nicegui import ui, app
 from components.navbar import create_navbar
 import random

@@ -310,9 +310,30 @@ html, body {
     display: flex;
     justify-content: center;
     align-items: center;
+    padding: 0 8px;
+    box-sizing: border-box;
     color: var(--white);
     font-weight: 600;
     font-size: 16px;
+}
+
+.day-header-row {
+    justify-content: space-between;
+    padding: 0 8px;
+}
+
+.day-header-text {
+    color: var(--white);
+    font-weight: 600;
+    font-size: 16px;
+    margin: 0;
+}
+
+.day-add-button {
+    color: var(--white);
+    min-width: 28px;
+    width: 28px;
+    height: 28px;
 }
 
 /* ========== CONTAINER 4.2 : CONTENU DU JOUR ========== */
@@ -355,13 +376,125 @@ html, body {
     gap: 15px;
 }
 
+.calendar-task-card .task-card-layout {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 12px 12px 48px;
+}
+
+.task-actions-left {
+    position: absolute;
+    left: 12px;
+    top: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding-top: 0;
+    padding-right: 0;
+    flex-shrink: 0;
+}
+
+.task-check {
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    accent-color: var(--white);
+}
+
+.task-delete-button {
+    border: none;
+    background: transparent;
+    color: #dc3545;
+    font-size: 24px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.2s ease;
+}
+
+.task-delete-icon {
+    color: #dc3545;
+    font-size: 24px;
+    line-height: 1;
+}
+
+.task-delete-button:hover {
+    transform: scale(1.15);
+}
+
+.task-content {
+    flex: 1;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.time-spent-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.time-spent-input {
+    width: 110px;
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    color: var(--white);
+    font-size: 12px;
+    padding: 2px 6px;
+    text-align: center;
+}
+
+.time-spent-input:focus {
+    outline: none;
+    border-color: var(--white);
+}
+
+.future-day-hidden {
+    display: none !important;
+}
+
+.past-tasks-button-container {
+    width: 370px;
+    height: 40px;
+    background-color: var(--secondary);
+    border-radius: 8px;
+    color: var(--white);
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    padding: 0 8px;
+    margin: 0 8px;
+}
+
+.past-day-hidden {
+    display: none !important;
+}
+
+.homework-card-container.is-completed,
+.exam-card-container.is-completed {
+    opacity: 0.7;
+}
+
+.homework-card-container.is-completed .task-content,
+.exam-card-container.is-completed .task-content {
+    text-decoration: line-through;
+}
+
 /* ========== CONTAINER 4.2.2.1 : CARD DEVOIR (RÉPÉTABLE) ========== */
 .homework-card-container {
     width: 320px;
     height: auto;
     background-color: var(--primary);
     border-radius: 15px;
-    padding: 12px;
+    padding: 0;
     color: var(--white);
     display: flex;
     flex-direction: column;
@@ -408,7 +541,7 @@ html, body {
     min-height: 98px;
     background-color: var(--primary);
     border-radius: 15px;
-    padding: 12px;
+    padding: 0;
     color: var(--white);
     display: flex;
     flex-direction: column;
@@ -434,7 +567,7 @@ html, body {
     opacity: 0.9;
 }
 
-/* ========== CONTAINER 5 : BOUTON AJOUTER ========== */
+/* ========== CONTAINER 6 : BOUTON AJOUTER ========== */
 .add-button-container {
     width: 370px;
     height: 44px;
@@ -447,7 +580,7 @@ html, body {
     cursor: pointer;
     font-size: 15px;
     font-weight: 600;
-    margin-top: 20px;
+    margin-top: 12px;
     border: none;
     transition: all 0.3s ease;
 }
@@ -462,7 +595,7 @@ html, body {
     transform: translateY(0);
 }
 
-/* ========== CONTAINER 6 : NAVBAR (FIXED) ========== */
+/* ========== CONTAINER 7 : NAVBAR (FIXED) ========== */
 .navbar-container {
     position: fixed;
     bottom: 0;
@@ -476,7 +609,7 @@ html, body {
     z-index: 1000;
 }
 
-/* ========== CONTAINER 6.1 : ONGLET NAVBAR (RÉPÉTABLE) ========== */
+/* ========== CONTAINER 7.1 : ONGLET NAVBAR (RÉPÉTABLE) ========== */
 .nav-item-container {
     display: flex;
     flex-direction: column;
