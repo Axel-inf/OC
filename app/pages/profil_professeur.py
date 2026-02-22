@@ -3,6 +3,9 @@ from nicegui import ui, app
 from components.navbar import create_navbar
 from database.database import get_db
 from database.models import Utilisateur, Enseignant
+from utils.school import all_school_classes
+from utils.school import all_teaching_subjects
+from utils.auth import hash_password
 
 def create():
     """Crée la page de profil pour un enseignant"""
@@ -13,9 +16,6 @@ def create():
     email_value = app.storage.user.get('email', '')
     classes_values: list[str] = []
     branches_values: list[str] = []
-    os_value = ''
-    oc_value = ''
-    basic_english_value = False
     bilingue_value = False
 
     if user_id is not None:
@@ -31,12 +31,13 @@ def create():
             if enseignant is not None:
                 classes_values = [item.strip() for item in (enseignant.classes or '').split(',') if item.strip()]
                 branches_values = [item.strip() for item in (enseignant.branches or '').split(',') if item.strip()]
-                os_value = enseignant.os or ''
-                oc_value = enseignant.oc or ''
-                basic_english_value = bool(enseignant.basic_english)
                 bilingue_value = bool(enseignant.bilingue)
         finally:
             db.close()
+
+    class_catalog = all_school_classes()
+    teaching_subjects = all_teaching_subjects()
+    selected_classes = set(classes_values)
     
     ui.add_head_html('''
         <style>
@@ -44,16 +45,23 @@ def create():
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 min-height: 100vh;
                 padding: 20px 20px 100px 20px;
+                overflow-x: hidden;
+                width: 100%;
             }
             .profil-card {
                 background: white;
                 padding: 30px;
                 border-radius: 20px;
                 box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-                max-width: 600px;
+                width: min(600px, 100%);
+                max-width: 100%;
                 margin: 0 auto;
             }
             .profil-header {
+                width: 100%;
+                display: flex;
+                justify-content: center;
+                align-items: center;
                 text-align: center;
                 margin-bottom: 30px;
             }
@@ -61,7 +69,9 @@ def create():
                 font-size: 28px;
                 font-weight: 700;
                 color: #333;
-                margin-top: 15px;
+                margin-top: 0;
+                width: 100%;
+                text-align: center;
             }
             .section-title {
                 font-size: 18px;
@@ -71,6 +81,55 @@ def create():
                 padding-bottom: 8px;
                 border-bottom: 2px solid #667eea;
             }
+            .profil-card .row {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+            .profil-card .row > * {
+                min-width: 0;
+            }
+            .profil-card .q-field__label {
+                opacity: 1 !important;
+                color: #666 !important;
+            }
+            .profil-card .q-field--outlined .q-field__control::before,
+            .profil-card .q-field--outlined .q-field__control::after,
+            .profil-card .q-field--outlined.q-field--focused .q-field__control::before,
+            .profil-card .q-field--outlined.q-field--focused .q-field__control::after {
+                border-color: var(--border-light) !important;
+                box-shadow: none !important;
+            }
+            .profil-card .q-field--focused .q-field__control::after {
+                border-width: 1px !important;
+            }
+            .profil-card .q-field--focused .q-field__native,
+            .profil-card .q-field--focused .q-field__prefix,
+            .profil-card .q-field--focused .q-field__suffix,
+            .profil-card .q-field--focused .q-field__input {
+                color: var(--text-dark) !important;
+            }
+            .profil-card .q-field__native,
+            .profil-card .q-field__input,
+            .profil-card .q-select__selection,
+            .profil-card .q-select__dropdown-icon {
+                color: var(--text-dark) !important;
+                opacity: 1 !important;
+            }
+            .field-caption {
+                width: 100%;
+                font-size: 13px;
+                color: var(--text-light);
+                margin: 0 0 4px 0;
+            }
+            @media (max-width: 520px) {
+                .profil-container {
+                    padding: 12px 12px 92px 12px;
+                }
+                .profil-card {
+                    padding: 16px;
+                    border-radius: 14px;
+                }
+            }
         </style>
     ''')
     
@@ -78,75 +137,94 @@ def create():
         with ui.card().classes('profil-card'):
             # En-tête du profil
             with ui.element('div').classes('profil-header'):
-                # Avatar
-                with ui.element('div').style('width: 80px; height: 80px; background: #667eea; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;'):
-                    ui.icon('person', size='48px', color='white')
-                
                 ui.html('<div class="profil-title">Profil</div>', sanitize=False)
             
             # Section Compte
             ui.html('<div class="section-title">Compte</div>', sanitize=False)
             
-            nom_input = ui.input('Nom', value=nom_value).props('outlined').classes('w-full q-mb-md')
-            prenom_input = ui.input('Prénom', value=prenom_value).props('outlined').classes('w-full q-mb-md')
-            email_input = ui.input('Email', value=email_value).props('outlined readonly').classes('w-full q-mb-md')
+            nom_input = ui.input('Nom', value=nom_value).props('outlined stack-label').classes('w-full q-mb-md')
+            prenom_input = ui.input('Prénom', value=prenom_value).props('outlined stack-label').classes('w-full q-mb-md')
+            email_input = ui.input('Email', value=email_value).props('outlined stack-label readonly').classes('w-full q-mb-md')
+            password_input = ui.input('Mot de passe', password=True, password_toggle_button=True).props('outlined stack-label').classes('w-full q-mb-md')
             
             # Section École
             ui.html('<div class="section-title">École</div>', sanitize=False)
             
-            # Classes enseignées
-            classes_container = ui.column().classes('w-full q-mb-md')
-            with classes_container:
-                ui.label('Mes classes').classes('text-subtitle2 text-grey-7 q-mb-sm')
-                with ui.row().classes('w-full gap-2'):
-                    if classes_values:
-                        for classe in classes_values:
-                            ui.chip(classe, removable=False).props('color=primary')
-                    else:
-                        ui.chip('Aucune classe', removable=False).props('color=grey-6 text-color=white')
+            classes_search = ui.input('Recherche classes', placeholder='Ex: 2GY1').props('outlined').classes('w-full q-mb-sm')
+            classes_box = ui.column().classes('w-full q-mb-md').style('max-height: 180px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 8px;')
+
+            def render_classes(filter_value: str = '') -> None:
+                classes_box.clear()
+                normalized = (filter_value or '').strip().lower()
+                filtered_classes = [
+                    class_name
+                    for class_name in class_catalog
+                    if normalized in class_name.lower()
+                ]
+
+                with classes_box:
+                    for class_name in filtered_classes:
+                        checkbox = ui.checkbox(class_name, value=class_name in selected_classes)
+
+                        def on_change(event, cls=class_name):
+                            if event.value:
+                                selected_classes.add(cls)
+                            else:
+                                selected_classes.discard(cls)
+
+                        checkbox.on_value_change(on_change)
+
+            classes_search.on_value_change(lambda event: render_classes(event.value or ''))
+            render_classes()
             
             # Branches enseignées
+            ui.label('Branches enseignées').classes('field-caption')
             branches_select = ui.select(
-                ['Mathématiques', 'Français', 'Allemand', 'Anglais', 'Histoire', 
-                 'Géographie', 'Sciences', 'Physique', 'Chimie', 'Biologie'],
+                teaching_subjects,
                 label='Branches enseignées',
                 value=branches_values,
                 multiple=True
-            ).props('outlined').classes('w-full q-mb-md')
-            
-            # Section Options enseignées
-            ui.html('<div class="section-title">Options</div>', sanitize=False)
-            
-            os_input = ui.input(
-                'Option spécifique (OS)',
-                value=os_value
-            ).props('outlined').classes('w-full q-mb-md')
-            
-            oc_input = ui.input(
-                'Option complémentaire (OC)',
-                value=oc_value
-            ).props('outlined').classes('w-full q-mb-md')
-            
-            with ui.column().classes('w-full gap-2'):
-                basic_english = ui.checkbox('Basic English', value=basic_english_value)
-                bilingue = ui.checkbox('Cours bilingues', value=bilingue_value)
-            
-            # Section Cours complémentaires enseignés
-            ui.html('<div class="section-title">Cours complémentaires</div>', sanitize=False)
-            
-            with ui.column().classes('w-full'):
-                ui.checkbox('OCOM').classes('q-mb-sm')
-                ui.checkbox('IVEO').classes('q-mb-sm')
-                ui.checkbox('4-OS Ec 2', value=True).classes('q-mb-sm')
-                ui.checkbox('4-OC Ec 2').classes('q-mb-sm')
-                ui.checkbox('4-OC Ec 3').classes('q-mb-sm')
-                ui.checkbox('4-OS Ec 3', value=True).classes('q-mb-sm')
+            ).props('outlined stack-label').classes('w-full q-mb-md')
+
+            bilingue = ui.checkbox('Cours bilingues', value=bilingue_value).classes('q-mb-md')
             
             # Boutons d'action
             with ui.row().classes('w-full gap-4 q-mt-lg'):
                 async def handle_save():
-                    # TODO: Sauvegarder les modifications
-                    ui.notify('Profil mis à jour avec succès!', type='positive')
+                    db = get_db()
+                    try:
+                        user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
+                        enseignant = db.query(Enseignant).filter(Enseignant.utilisateur_id == user_id).first()
+                        if user is None or enseignant is None:
+                            ui.notify('Profil introuvable', type='negative')
+                            return
+
+                        user.nom = (nom_input.value or '').strip() or user.nom
+                        user.prenom = (prenom_input.value or '').strip() or user.prenom
+                        new_password = (password_input.value or '').strip()
+                        if new_password:
+                            if len(new_password) < 8:
+                                ui.notify('Le mot de passe doit contenir au minimum 8 caractères', type='negative')
+                                return
+                            user.mot_de_passe = hash_password(new_password)
+
+                        enseignant.classes = ','.join(sorted(selected_classes))
+                        selected_branches = branches_select.value or []
+                        enseignant.branches = ','.join(selected_branches)
+                        enseignant.os = ''
+                        enseignant.oc = ''
+                        enseignant.basic_english = ('Basic English' in selected_branches)
+                        enseignant.bilingue = bool(bilingue.value)
+
+                        db.commit()
+                        app.storage.user['nom'] = user.nom
+                        app.storage.user['prenom'] = user.prenom
+                        ui.notify('Profil mis à jour avec succès!', type='positive')
+                    except Exception:
+                        db.rollback()
+                        ui.notify('Erreur lors de la sauvegarde du profil', type='negative')
+                    finally:
+                        db.close()
                 
                 async def handle_logout():
                     app.storage.user.clear()

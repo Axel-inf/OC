@@ -6,6 +6,8 @@ from . import formulaire
 from . import profil_eleve
 from . import profil_professeur
 from . import statistiques
+from . import charge_eleve
+from . import reset_password
 
 __all__ = [
     'login',
@@ -15,5 +17,7 @@ __all__ = [
     'formulaire',
     'profil_eleve',
     'profil_professeur',
-    'statistiques'
+    'statistiques',
+    'charge_eleve',
+    'reset_password'
 ]

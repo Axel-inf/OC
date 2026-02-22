@@ -111,3 +111,18 @@ class TempsReel(Base):
     eleve = relationship("Eleve", back_populates="temps_reels")
     devoir = relationship("Devoir", back_populates="temps_reels")
     examen = relationship("Examen", back_populates="temps_reels")
+
+
+class CalendarEvent(Base):
+    __tablename__ = 'calendar_events'
+
+    id = Column(Integer, primary_key=True)
+    user_identifier = Column(String(255), nullable=False, index=True)
+    event_type = Column(String(20), nullable=False)
+    subject = Column(String(100), nullable=False)
+    title = Column(String(200), nullable=False, default='')
+    description = Column(Text, default='')
+    date_iso = Column(String(10), nullable=False)
+    estimated_time = Column(String(50), nullable=False)
+    time_spent = Column(String(50), nullable=False, default='0 minute')
+    is_hidden = Column(Boolean, nullable=False, default=False)

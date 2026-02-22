@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker, Session
 from config.settings import DATABASE_URL
 from database.models import Base
@@ -9,6 +9,21 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def init_database():
     """Initialise la base de données"""
     Base.metadata.create_all(bind=engine)
+    _ensure_calendar_event_columns()
+
+
+def _ensure_calendar_event_columns() -> None:
+    inspector = inspect(engine)
+    table_names = inspector.get_table_names()
+    if 'calendar_events' not in table_names:
+        return
+
+    columns = {column['name'] for column in inspector.get_columns('calendar_events')}
+    if 'is_hidden' in columns:
+        return
+
+    with engine.begin() as connection:
+        connection.execute(text('ALTER TABLE calendar_events ADD COLUMN is_hidden BOOLEAN NOT NULL DEFAULT 0'))
 
 def get_db() -> Session:
     """Retourne une session de base de données"""

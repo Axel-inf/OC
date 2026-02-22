@@ -6,6 +6,7 @@ from components.navbar import create_navbar
 
 def create():
     """Crée la page d'accueil"""
+    role = app.storage.user.get('role')
     
     ui.add_head_html('<link rel="stylesheet" href="/static/css/custom.css">')
 
@@ -210,25 +211,33 @@ def create():
         # Rectangle bleu en bas (container pour les rectangles blancs)
 
         with ui.element('div').classes('blue-footer'):
+            if role == 'enseignant':
+                with ui.element('div').classes('white-card white-card-link').on(
+                    'click', lambda: ui.navigate.to('/charge-eleve')
+                ):
+                    ui.label("Consulter la charge des élèves") \
+                        .style('display:block; text-align:center; font-size:16px; font-weight:600; margin-bottom:8px;')
 
-            with ui.element('div').classes('white-card white-card-link').on(
-                'click', lambda: ui.navigate.to('/calendrier')
-            ):
-                ui.label("Accéder à votre calendrier") \
-                    .style('display:block; text-align:center; font-size:16px; font-weight:600; margin-bottom:8px;')
+                    ui.icon('groups', size='32px') \
+                        .style('display:block; margin: 0 auto;')
+            else:
+                with ui.element('div').classes('white-card white-card-link').on(
+                    'click', lambda: ui.navigate.to('/calendrier')
+                ):
+                    ui.label("Accéder à votre calendrier") \
+                        .style('display:block; text-align:center; font-size:16px; font-weight:600; margin-bottom:8px;')
 
-                ui.icon('calendar_month', size='32px') \
-                    .style('display:block; margin: 0 auto;')
+                    ui.icon('calendar_month', size='32px') \
+                        .style('display:block; margin: 0 auto;')
 
+                with ui.element('div').classes('white-card white-card-link').on(
+                    'click', lambda: ui.navigate.to('/statistiques')
+                ):
+                    ui.label("Jeter un coup d'œil aux statistiques") \
+                        .style('display:block; text-align:center; font-size:16px; font-weight:600; margin-bottom:8px;')
 
-            with ui.element('div').classes('white-card white-card-link').on(
-                'click', lambda: ui.navigate.to('/statistiques')
-            ):
-                ui.label("Jeter un coup d'œil aux statistiques") \
-                    .style('display:block; text-align:center; font-size:16px; font-weight:600; margin-bottom:8px;')
-
-                ui.icon('bar_chart', size='32px') \
-                    .style('display:block; margin: 0 auto;')
+                    ui.icon('bar_chart', size='32px') \
+                        .style('display:block; margin: 0 auto;')
 
 
 

@@ -4,6 +4,8 @@ from components.navbar import create_navbar
 import re
 from datetime import date
 import calendar
+from database.calendar_repository import create_calendar_event
+from utils.school import all_teaching_subjects
 
 
 MONTH_NAMES_FR = [
@@ -41,6 +43,50 @@ def parse_date_input(raw_value: str) -> date | None:
 
 def format_date_for_input(value: date) -> str:
     return value.strftime('%d.%m.%Y')
+
+
+def parse_estimated_time_to_minutes(raw_value: str) -> int | None:
+    if not raw_value:
+        return None
+
+    normalized = raw_value.strip().lower().replace(',', '.')
+
+    compact_match = re.search(r'(\d+)\s*h\s*(\d{1,2})\b', normalized)
+    if compact_match:
+        hours_value = int(compact_match.group(1))
+        minutes_value = int(compact_match.group(2))
+        if minutes_value >= 60:
+            return None
+        return (hours_value * 60) + minutes_value
+
+    total_minutes = 0
+    has_supported_unit = False
+
+    hour_matches = re.findall(r'(\d+(?:\.\d+)?)\s*(?:heure|heures|h)\b', normalized)
+    if hour_matches:
+        has_supported_unit = True
+        for hour_raw in hour_matches:
+            total_minutes += int(round(float(hour_raw) * 60))
+
+    minute_matches = re.findall(r'(\d+)\s*(?:minute|minutes|min)\b', normalized)
+    if minute_matches:
+        has_supported_unit = True
+        for minute_raw in minute_matches:
+            total_minutes += int(minute_raw)
+
+    if not has_supported_unit or total_minutes <= 0:
+        return None
+
+    return total_minutes
+
+
+def format_minutes_for_storage(total_minutes: int) -> str:
+    hours_value, minutes_value = divmod(total_minutes, 60)
+    if hours_value and minutes_value:
+        return f'{hours_value} h {minutes_value} min'
+    if hours_value:
+        return f'{hours_value} h'
+    return f'{minutes_value} min'
 
 
 def create_date_picker(label: str, initial_date: date) -> ui.input:
@@ -196,6 +242,8 @@ def create():
         </style>
     ''')
     
+    teaching_subjects = all_teaching_subjects()
+
     with ui.column().classes('formulaire-container'):
         with ui.card().classes('formulaire-card'):
             # Icône d'ajout
@@ -222,9 +270,7 @@ def create():
                     titre = ui.input('Titre').props('outlined').classes('w-full q-mb-md')
                     
                     branche = ui.select(
-                        ['Mathématiques', 'Français', 'Allemand', 'Anglais', 'Histoire', 
-                         'Géographie', 'Sciences', 'Physique', 'Chimie', 'Biologie',
-                         'Arts visuels', 'Éducation physique', 'Musique'],
+                        teaching_subjects,
                         label='Branche'
                     ).props('outlined').classes('w-full q-mb-md')
                     
@@ -273,19 +319,29 @@ def create():
                             ui.notify('Format de date invalide (ex: 13.01 ou 13.01.2026)', type='negative')
                             return
 
+                        parsed_estimation_minutes = parse_estimated_time_to_minutes(estimation_value)
+                        if parsed_estimation_minutes is None:
+                            ui.notify('Format du temps invalide (ex: 1h30, 2 h, 45 min, 1 heure 15 min)', type='negative')
+                            return
+
+                        normalized_estimation = format_minutes_for_storage(parsed_estimation_minutes)
+
                         event_type = type_event.value.lower()
-                        saved_events = app.storage.user.get('calendar_events', [])
-                        saved_events.append({
-                            'type': event_type,
-                            'title': titre_value,
-                            'subject': branche_value,
-                            'description': description_value,
-                            'date': date_value,
-                            'date_iso': parsed_date.isoformat(),
-                            'estimated_time': estimation_value,
-                            'time_spent': '0 minute',
-                        })
-                        app.storage.user['calendar_events'] = saved_events
+                        user_identifier = (
+                            app.storage.user.get('email')
+                            or str(app.storage.user.get('user_id') or '')
+                            or 'anonymous'
+                        )
+                        create_calendar_event(
+                            user_identifier=user_identifier,
+                            event_type=event_type,
+                            subject=branche_value,
+                            title=titre_value,
+                            description=description_value,
+                            date_iso=parsed_date.isoformat(),
+                            estimated_time=normalized_estimation,
+                            time_spent='0 minute',
+                        )
 
                         ui.notify(f'{type_event.value} ajouté avec succès!', type='positive')
                         ui.navigate.to('/calendrier')

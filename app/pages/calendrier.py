@@ -4,7 +4,13 @@ from nicegui import ui, app
 from components.navbar import create_navbar
 from datetime import date, timedelta
 from html import escape
+from pathlib import Path
 import re
+from database.calendar_repository import (
+    create_calendar_event,
+    list_calendar_events_for_user,
+    seed_default_calendar_events_for_user,
+)
 
 
 DAY_NAMES_FR = {
@@ -47,95 +53,161 @@ def _parse_date_from_text(raw_value: str) -> date | None:
         return None
 
 
-def _build_default_events() -> list[dict]:
-    current_year = date.today().year
-    return [
-        {
-            'type': 'devoir',
-            'subject': 'Mathématiques',
-            'title': '',
-            'description': 'Exercice 1.20',
-            'estimated_time': '30 minutes',
-            'time_spent': '1 heure',
-            'date_obj': date(current_year, 1, 13),
-        },
-        {
-            'type': 'devoir',
-            'subject': 'Français',
-            'title': '',
-            'description': 'Lecture de Théodat',
-            'estimated_time': '7 heures',
-            'time_spent': '10 heures',
-            'date_obj': date(current_year, 1, 13),
-        },
-        {
-            'type': 'examen',
-            'subject': 'Physique',
-            'title': '',
-            'description': 'Magnétisme',
-            'estimated_time': '2 heures',
-            'time_spent': '8 heures',
-            'date_obj': date(current_year, 1, 13),
-        },
-        {
-            'type': 'devoir',
-            'subject': 'Chimie',
-            'title': '',
-            'description': 'Exercice chapitre 5',
-            'estimated_time': '1 heure',
-            'time_spent': '1h30',
-            'date_obj': date(current_year, 1, 15),
-        },
-        {
-            'type': 'examen',
-            'subject': 'Anglais',
-            'title': '',
-            'description': 'Grammaire et vocabulaire',
-            'estimated_time': '1 heure',
-            'time_spent': '30 minutes',
-            'date_obj': date(current_year, 1, 15),
-        },
-    ]
+def _duration_to_minutes(raw_value: str) -> int:
+    if not raw_value:
+        return 0
+
+    normalized = raw_value.strip().lower().replace(',', '.')
+
+    compact_match = re.search(r'(\d+)\s*h\s*(\d{1,2})', normalized)
+    if compact_match:
+        hours_value = int(compact_match.group(1))
+        minutes_value = int(compact_match.group(2))
+        return (hours_value * 60) + minutes_value
+
+    total_minutes = 0
+
+    hour_matches = re.findall(r'(\d+(?:\.\d+)?)\s*(?:heure|heures|h)\b', normalized)
+    for hour_raw in hour_matches:
+        total_minutes += int(round(float(hour_raw) * 60))
+
+    minute_matches = re.findall(r'(\d+)\s*(?:minute|minutes|min)\b', normalized)
+    for minute_raw in minute_matches:
+        total_minutes += int(minute_raw)
+
+    if total_minutes > 0:
+        return total_minutes
+
+    if normalized.isdigit():
+        return int(normalized)
+
+    return 0
 
 
-def _build_custom_events() -> list[dict]:
-    custom_events = app.storage.user.get('calendar_events', [])
+def _format_duration(total_minutes: int) -> str:
+    if total_minutes <= 0:
+        return '0 min'
+
+    hours_value, minutes_value = divmod(total_minutes, 60)
+    if hours_value and minutes_value:
+        return f'{hours_value} h {minutes_value} min'
+    if hours_value:
+        return f'{hours_value} h'
+    return f'{minutes_value} min'
+
+
+def _format_percentage(value: float) -> str:
+    rounded_value = int(round(value))
+    return f'{rounded_value}%'
+
+
+def _build_workload_display(total_minutes: int, target_minutes: int) -> tuple[float, str, str]:
+    if target_minutes <= 0:
+        return 0.0, '0%', 'workload-low'
+
+    ratio = (total_minutes / target_minutes) * 100
+
+    if ratio >= 100:
+        label = 'Surchargé' if total_minutes > target_minutes else '100%'
+        return 100.0, label, 'workload-critical'
+
+    if ratio < 50:
+        return ratio, _format_percentage(ratio), 'workload-low'
+
+    return ratio, _format_percentage(ratio), 'workload-high'
+
+
+def _get_user_identifier() -> str:
+    return (
+        app.storage.user.get('email')
+        or str(app.storage.user.get('user_id') or '')
+        or 'anonymous'
+    )
+
+
+def _load_events_from_database(user_identifier: str) -> list[dict]:
+    db_events = list_calendar_events_for_user(user_identifier)
     normalized_events: list[dict] = []
 
-    for event in custom_events:
-        date_obj = None
-        date_iso = event.get('date_iso')
-        if date_iso:
-            try:
-                date_obj = date.fromisoformat(date_iso)
-            except ValueError:
-                date_obj = None
-
-        if date_obj is None:
-            date_obj = _parse_date_from_text(event.get('date', ''))
-
-        if date_obj is None:
+    for event in db_events:
+        try:
+            date_obj = date.fromisoformat(event.date_iso)
+        except ValueError:
             continue
 
         normalized_events.append({
-            'type': event.get('type', 'devoir'),
-            'subject': event.get('subject', 'Branche non définie'),
-            'title': event.get('title', ''),
-            'description': event.get('description', ''),
-            'estimated_time': event.get('estimated_time', 'Non renseigné'),
-            'time_spent': event.get('time_spent', '0 minute'),
+            'id': int(event.id),
+            'type': event.event_type,
+            'subject': event.subject,
+            'title': event.title or '',
+            'description': event.description or '',
+            'estimated_time': event.estimated_time,
+            'time_spent': event.time_spent or '0 minute',
             'date_obj': date_obj,
         })
 
     return normalized_events
 
+
+def _migrate_legacy_storage_events(user_identifier: str) -> None:
+    legacy_events = app.storage.user.get('calendar_events', [])
+    if not legacy_events:
+        return
+
+    for event in legacy_events:
+        parsed_date = None
+        date_iso = event.get('date_iso')
+        if date_iso:
+            try:
+                parsed_date = date.fromisoformat(date_iso)
+            except ValueError:
+                parsed_date = None
+
+        if parsed_date is None:
+            parsed_date = _parse_date_from_text(event.get('date', ''))
+
+        if parsed_date is None:
+            continue
+
+        create_calendar_event(
+            user_identifier=user_identifier,
+            event_type=event.get('type', 'devoir'),
+            subject=event.get('subject', 'Branche non définie'),
+            title=event.get('title', ''),
+            description=event.get('description', ''),
+            date_iso=parsed_date.isoformat(),
+            estimated_time=event.get('estimated_time', 'Non renseigné'),
+            time_spent=event.get('time_spent', '0 minute'),
+        )
+
+    app.storage.user['calendar_events'] = []
+
 def create():
     """Crée la page calendrier"""
-    events = _build_default_events() + _build_custom_events()
+    user_identifier = _get_user_identifier()
+    _migrate_legacy_storage_events(user_identifier)
+    seed_default_calendar_events_for_user(user_identifier)
+    events = _load_events_from_database(user_identifier)
     events_by_date: dict[date, list[dict]] = {}
     for event in events:
         event_date = event['date_obj']
         events_by_date.setdefault(event_date, []).append(event)
+
+    workload_window_days = 7
+    workload_target_minutes = 18 * 60
+    workload_total_minutes = 0
+    for offset in range(workload_window_days):
+        current_day = date.today() + timedelta(days=offset)
+        day_events = events_by_date.get(current_day, [])
+        workload_total_minutes += sum(
+            _duration_to_minutes(event.get('estimated_time', ''))
+            for event in day_events
+        )
+
+    workload_percentage, workload_label, workload_state_class = _build_workload_display(
+        workload_total_minutes,
+        workload_target_minutes,
+    )
 
     start_date = date.today()
     visible_days = 5
@@ -156,38 +228,132 @@ def create():
         app.storage.user.pop('calendar_prefill_date_iso', None)
         ui.navigate.to('/formulaire')
     
-    ui.add_head_html('<link rel="stylesheet" href="/static/css/custom.css">')
+    css_path = Path(__file__).resolve().parents[1] / 'static' / 'css' / 'custom.css'
+    css_version = int(css_path.stat().st_mtime) if css_path.exists() else 0
+    ui.add_head_html(f'<link rel="stylesheet" href="/static/css/custom.css?v={css_version}">')
     ui.add_head_html('''
         <script>
+            window.updateWorkloadBar = function(deltaMinutes) {
+                const targetMinutes = parseInt(document.body.dataset.workloadTargetMinutes || '0', 10);
+                const currentTotal = parseInt(document.body.dataset.workloadTotalMinutes || '0', 10);
+                const nextTotal = Math.max(0, currentTotal + deltaMinutes);
+
+                document.body.dataset.workloadTotalMinutes = String(nextTotal);
+
+                const fill = document.getElementById('workload-fill');
+                const text = document.getElementById('workload-text');
+                const container = document.getElementById('workload-container');
+                if (!fill || !text || !container) {
+                    return;
+                }
+
+                container.classList.remove('workload-low', 'workload-high', 'workload-critical');
+
+                if (targetMinutes <= 0) {
+                    fill.style.width = '0%';
+                    text.textContent = '0%';
+                    container.classList.add('workload-low');
+                    return;
+                }
+
+                if (nextTotal >= targetMinutes) {
+                    fill.style.width = '100%';
+                    text.textContent = nextTotal > targetMinutes ? 'Surchargé' : '100%';
+                    container.classList.add('workload-critical');
+                    return;
+                }
+
+                const ratio = (nextTotal / targetMinutes) * 100;
+                fill.style.width = `${ratio}%`;
+                text.textContent = `${Math.round(ratio)}%`;
+                if (ratio < 50) {
+                    container.classList.add('workload-low');
+                } else {
+                    container.classList.add('workload-high');
+                }
+            }
+
             window.markCalendarDone = function(id, checkbox) {
                 const card = document.getElementById(id);
                 if (!card) return;
                 card.classList.toggle('is-completed', checkbox.checked);
             }
 
-            window.deleteCalendarItem = function(id) {
+            window.clearTimeSpentInput = function(inputElement) {
+                if (inputElement.value === 'À compléter') {
+                    inputElement.value = '';
+                }
+            }
+
+            window.updateCalendarTimeSpent = async function(eventId, inputElement) {
+                const userIdentifier = document.body.dataset.calendarUserIdentifier || '';
+                const enteredValue = (inputElement.value || '').trim();
+                const valueToSave = enteredValue.length > 0 ? enteredValue : '0 minute';
+
+                try {
+                    await fetch('/api/calendar-events/time-spent', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            event_id: eventId,
+                            user_identifier: userIdentifier,
+                            time_spent: valueToSave,
+                        }),
+                    });
+
+                    if (!enteredValue) {
+                        inputElement.value = 'À compléter';
+                    }
+                } catch (error) {
+                    console.error('Erreur de sauvegarde du temps passé', error);
+                }
+            }
+
+            window.deleteCalendarItem = async function(id, eventId) {
                 const card = document.getElementById(id);
                 if (!card) return;
+
+                const removedMinutes = parseInt(card.dataset.estimatedMinutes || '0', 10);
+                const inWorkloadWindow = card.dataset.workloadWindow === '1';
+
+                const userIdentifier = document.body.dataset.calendarUserIdentifier || '';
+                try {
+                    const response = await fetch('/api/calendar-events/delete', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            event_id: eventId,
+                            user_identifier: userIdentifier,
+                        }),
+                    });
+
+                    if (!response.ok) {
+                        return;
+                    }
+                } catch (error) {
+                    console.error('Erreur de suppression calendrier', error);
+                    return;
+                }
 
                 const dayContent = card.closest('.day-content-container');
                 if (!dayContent) {
                     card.remove();
+                    if (inWorkloadWindow) {
+                        const removedSafe = Number.isNaN(removedMinutes) ? 0 : removedMinutes;
+                        window.updateWorkloadBar(-removedSafe);
+                    }
                     return;
-                }
-
-                const previous = card.previousElementSibling;
-                const next = card.nextElementSibling;
-
-                if (previous && previous.classList.contains('separator')) {
-                    previous.remove();
-                } else if (next && next.classList.contains('separator')) {
-                    next.remove();
                 }
 
                 card.remove();
 
-                const remainingCards = dayContent.querySelectorAll('.calendar-task-card').length;
-                if (remainingCards <= 0) {
+                if (inWorkloadWindow) {
+                    const removedSafe = Number.isNaN(removedMinutes) ? 0 : removedMinutes;
+                    window.updateWorkloadBar(-removedSafe);
+                }
+
+                const remainingCards = Array.from(dayContent.querySelectorAll('.calendar-task-card'));
+                if (remainingCards.length <= 0) {
                     dayContent.classList.add('empty', 'tertiary');
                     dayContent.innerHTML = 'Aucun devoir ou examen ce jour-ci';
                     return;
@@ -195,10 +361,25 @@ def create():
 
                 const totalElement = dayContent.querySelector('.total-time-container');
                 if (totalElement) {
-                    totalElement.textContent = `Nombre d'éléments : ${remainingCards}`;
-                }
+                    const totalMinutes = remainingCards.reduce((sum, currentCard) => {
+                        const minutesValue = parseInt(currentCard.dataset.estimatedMinutes || '0', 10);
+                        return sum + (Number.isNaN(minutesValue) ? 0 : minutesValue);
+                    }, 0);
 
-                dayContent.querySelectorAll('.separator').forEach((separator) => separator.remove());
+                    const hoursValue = Math.floor(totalMinutes / 60);
+                    const minutesValue = totalMinutes % 60;
+                    let formattedDuration = '0 min';
+
+                    if (hoursValue > 0 && minutesValue > 0) {
+                        formattedDuration = `${hoursValue} h ${minutesValue} min`;
+                    } else if (hoursValue > 0) {
+                        formattedDuration = `${hoursValue} h`;
+                    } else {
+                        formattedDuration = `${minutesValue} min`;
+                    }
+
+                    totalElement.textContent = `Temps de travail : ${formattedDuration}`;
+                }
             }
 
             window.showPastDays = function() {
@@ -216,10 +397,20 @@ def create():
 
         </script>
     ''')
+    ui.run_javascript(f'document.body.dataset.calendarUserIdentifier = {user_identifier!r};')
+    ui.run_javascript(f'document.body.dataset.workloadTargetMinutes = {workload_target_minutes};')
+    ui.run_javascript(f'document.body.dataset.workloadTotalMinutes = {workload_total_minutes};')
     
     with ui.column().classes('page-container'):
         ui.html('<div class="titre-container">Calendrier</div>', sanitize=False)
-        ui.html('<div class="charge-travail-container">Charge de travail</div>', sanitize=False)
+        ui.html('<div class="charge-travail-label">Charge de travail pour les 7 prochains jours</div>', sanitize=False)
+        ui.html(
+            f'''<div id="workload-container" class="charge-travail-container {workload_state_class}">
+                    <div id="workload-fill" class="charge-travail-fill" style="width: {workload_percentage:.2f}%;"></div>
+                    <div id="workload-text" class="charge-travail-text">{workload_label}</div>
+                </div>''',
+            sanitize=False,
+        )
         ui.button(
             'Tâches passées',
             on_click=lambda: ui.run_javascript('showPastDays()')
@@ -248,9 +439,13 @@ def create():
                         with ui.column().classes('day-content-container empty tertiary'):
                             ui.html('Aucun devoir ou examen ce jour-ci', sanitize=False)
                     else:
+                        day_total_minutes = sum(
+                            _duration_to_minutes(event.get('estimated_time', ''))
+                            for event in day_events
+                        )
                         with ui.column().classes('day-content-container'):
                             ui.html(
-                                f'<div class="total-time-container">Nombre d\'éléments : {len(day_events)}</div>',
+                                f'<div class="total-time-container">Temps de travail : {_format_duration(day_total_minutes)}</div>',
                                 sanitize=False,
                             )
 
@@ -268,6 +463,8 @@ def create():
                                         if event_type == 'examen'
                                         else 'homework-card-container'
                                     )
+                                    event_type_label = 'Examen' if event_type == 'examen' else 'Devoir'
+                                    estimated_minutes = _duration_to_minutes(event.get('estimated_time', ''))
 
                                     subject = escape(event.get('subject', 'Branche non définie'))
                                     title = escape(event.get('title', ''))
@@ -286,21 +483,23 @@ def create():
                                         if event_type == 'examen'
                                         else 'Temps estimé'
                                     )
+                                    in_workload_window = 1 if start_date <= current_date <= (start_date + timedelta(days=workload_window_days - 1)) else 0
 
                                     ui.html(
                                         f'''
-                                            <div id="{item_id}" class="{card_class} calendar-task-card">
+                                            <div id="{item_id}" class="{card_class} calendar-task-card" data-estimated-minutes="{estimated_minutes}" data-workload-window="{in_workload_window}">
                                                 <div class="task-card-layout">
                                                     <div class="task-actions-left">
                                                         <input type="checkbox" class="task-check" onchange="markCalendarDone('{item_id}', this)">
-                                                        <button type="button" class="task-delete-button" onclick="deleteCalendarItem('{item_id}')" aria-label="Supprimer"><span class="task-delete-icon material-icons">delete</span></button>
+                                                        <button type="button" class="task-delete-button" onclick="deleteCalendarItem('{item_id}', {event['id']})" aria-label="Supprimer"><span class="task-delete-icon material-icons">delete</span></button>
                                                     </div>
                                                     <div class="task-content">
+                                                        <div class="task-type-label">{event_type_label}</div>
                                                         <div class="subject">{subject}</div>
                                                         <div class="description">{full_description}</div>
                                                         <div class="time-info">{time_label} : {estimated_time}</div>
                                                         <div class="time-info time-spent-row">Temps passé :
-                                                            <input type="text" class="time-spent-input" value="À compléter" aria-label="Temps passé">
+                                                            <input type="text" class="time-spent-input" value="{time_spent if time_spent != '0 minute' else 'À compléter'}" aria-label="Temps passé" onfocus="clearTimeSpentInput(this)" onblur="updateCalendarTimeSpent({event['id']}, this)">
                                                         </div>
                                                     </div>
                                                 </div>
@@ -308,9 +507,6 @@ def create():
                                         ''',
                                         sanitize=False,
                                     )
-
-                                    if index < len(sorted_day_events) - 1:
-                                        ui.html('<div class="separator"></div>', sanitize=False)
 
         ui.button(
             '+ Ajouter un événement',

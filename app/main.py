@@ -1,17 +1,99 @@
 #aide de l'IA
 import os
+import asyncio
+from datetime import datetime
 from nicegui import ui, app
+from fastapi import Body, HTTPException
 from database.database import init_database
-from pages import login, inscription, accueil, calendrier, formulaire, profil_eleve, profil_professeur, statistiques
-from config.settings import APP_NAME, SECRET_KEY
+from database.calendar_repository import (
+    delete_calendar_event,
+    move_unfinished_events_to_next_day,
+    update_calendar_event_time_spent,
+)
+from pages import login, inscription, accueil, calendrier, formulaire, profil_eleve, profil_professeur, statistiques, reset_password
+from pages import charge_eleve
+from database.seed_demo_data import seed_demo_school_data
+from config.settings import (
+    APP_NAME,
+    CALENDAR_AUTO_ROLLOVER_HOUR,
+    CALENDAR_AUTO_ROLLOVER_MINUTE,
+    SECRET_KEY,
+)
 
 # Initialisation de la base de données
 init_database()
+seed_demo_school_data()
 
 # Configuration de l'application
 # Utiliser le chemin absolu pour servir les fichiers statiques
 static_path = os.path.join(os.path.dirname(__file__), 'static')
 app.add_static_files('/static', static_path)
+
+
+def _process_calendar_rollover_if_due() -> None:
+    now = datetime.now()
+    current_marker = now.date().isoformat()
+    threshold = (CALENDAR_AUTO_ROLLOVER_HOUR, CALENDAR_AUTO_ROLLOVER_MINUTE)
+
+    if (now.hour, now.minute) < threshold:
+        return
+
+    last_processed_marker = app.storage.general.get('calendar_rollover_last_processed_date')
+    if last_processed_marker == current_marker:
+        return
+
+    moved_count = move_unfinished_events_to_next_day(now.date())
+    app.storage.general['calendar_rollover_last_processed_date'] = current_marker
+
+    if moved_count > 0:
+        print(f'[calendrier] {moved_count} événement(s) non réalisé(s) reporté(s) au jour suivant.')
+
+
+async def _calendar_rollover_loop() -> None:
+    while True:
+        _process_calendar_rollover_if_due()
+        await asyncio.sleep(30.0)
+
+
+@app.on_event('startup')
+async def _start_calendar_rollover_loop() -> None:
+    app.state.calendar_rollover_task = asyncio.create_task(_calendar_rollover_loop())
+
+
+@app.on_event('shutdown')
+async def _stop_calendar_rollover_loop() -> None:
+    task = getattr(app.state, 'calendar_rollover_task', None)
+    if task:
+        task.cancel()
+
+
+@app.post('/api/calendar-events/delete')
+async def api_delete_calendar_event(payload: dict = Body(...)):
+    event_id = int(payload.get('event_id', 0))
+    user_identifier = str(payload.get('user_identifier', '')).strip()
+    if event_id <= 0 or not user_identifier:
+        raise HTTPException(status_code=400, detail='Paramètres invalides')
+
+    deleted = delete_calendar_event(event_id, user_identifier)
+    if not deleted:
+        raise HTTPException(status_code=404, detail='Événement introuvable')
+
+    return {'success': True}
+
+
+@app.post('/api/calendar-events/time-spent')
+async def api_update_calendar_time_spent(payload: dict = Body(...)):
+    event_id = int(payload.get('event_id', 0))
+    user_identifier = str(payload.get('user_identifier', '')).strip()
+    time_spent = str(payload.get('time_spent', '')).strip() or '0 minute'
+    if event_id <= 0 or not user_identifier:
+        raise HTTPException(status_code=400, detail='Paramètres invalides')
+
+    updated = update_calendar_event_time_spent(event_id, user_identifier, time_spent)
+    if not updated:
+        raise HTTPException(status_code=404, detail='Événement introuvable')
+
+    return {'success': True}
 
 # Variable de session pour l'utilisateur connecté
 @ui.page('/')
@@ -31,6 +113,10 @@ def page_login():
 def page_inscription():
     inscription.create()
 
+@ui.page('/reinitialisation-mot-de-passe')
+def page_reset_password():
+    reset_password.create()
+
 @ui.page('/accueil')
 def page_accueil():
     if not app.storage.user.get('authenticated', False):
@@ -42,6 +128,9 @@ def page_accueil():
 def page_calendrier():
     if not app.storage.user.get('authenticated', False):
         ui.navigate.to('/login')
+        return
+    if app.storage.user.get('role') == 'enseignant':
+        ui.navigate.to('/charge-eleve')
         return
     calendrier.create()
 
@@ -70,7 +159,21 @@ def page_statistiques():
     if not app.storage.user.get('authenticated', False):
         ui.navigate.to('/login')
         return
+    if app.storage.user.get('role') == 'enseignant':
+        ui.navigate.to('/charge-eleve')
+        return
     statistiques.create()
+
+
+@ui.page('/charge-eleve')
+def page_charge_eleve():
+    if not app.storage.user.get('authenticated', False):
+        ui.navigate.to('/login')
+        return
+    if app.storage.user.get('role') != 'enseignant':
+        ui.navigate.to('/accueil')
+        return
+    charge_eleve.create()
 
 # Lancement de l'application
 if __name__ in {"__main__", "__mp_main__"}:

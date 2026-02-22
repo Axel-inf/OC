@@ -1,7 +1,8 @@
-from nicegui import ui
+from nicegui import ui, app
 
 def create_navbar():
     """Crée la barre de navigation en bas de page"""
+    role = app.storage.user.get('role')
     
     ui.add_head_html('''
         <style>
@@ -68,14 +69,18 @@ def create_navbar():
                 ui.label('Accueil').classes('nav-label')
             
             # Bouton Calendrier
-            with ui.element('div').classes('nav-item').on('click', lambda: ui.navigate.to('/calendrier')):
-                ui.icon('calendar_month').classes('nav-icon')
-                ui.label('Calendrier').classes('nav-label')
-            
-            # Bouton Statistiques
-            with ui.element('div').classes('nav-item').on('click', lambda: ui.navigate.to('/statistiques')):
-                ui.icon('bar_chart').classes('nav-icon')
-                ui.label('Statistiques').classes('nav-label')
+            if role == 'enseignant':
+                with ui.element('div').classes('nav-item').on('click', lambda: ui.navigate.to('/charge-eleve')):
+                    ui.icon('groups').classes('nav-icon')
+                    ui.label('Charge élèves').classes('nav-label')
+            else:
+                with ui.element('div').classes('nav-item').on('click', lambda: ui.navigate.to('/calendrier')):
+                    ui.icon('calendar_month').classes('nav-icon')
+                    ui.label('Calendrier').classes('nav-label')
+
+                with ui.element('div').classes('nav-item').on('click', lambda: ui.navigate.to('/statistiques')):
+                    ui.icon('bar_chart').classes('nav-icon')
+                    ui.label('Statistiques').classes('nav-label')
             
             # Bouton Profil
             with ui.element('div').classes('nav-item').on('click', lambda: ui.navigate.to('/profil')):

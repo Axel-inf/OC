@@ -3,6 +3,14 @@ from nicegui import ui, app
 from components.navbar import create_navbar
 from database.database import get_db
 from database.models import Utilisateur, Eleve
+from utils.auth import hash_password
+from utils.school import (
+    all_school_classes,
+    student_language_1_options,
+    student_language_options,
+    student_oc_options,
+    student_os_options,
+)
 
 def create():
     """Crée la page de profil pour un élève"""
@@ -20,6 +28,11 @@ def create():
     oc_value = 'Physique'
     basic_english_value = False
     bilingue_value = False
+    classes_catalog = all_school_classes()
+    language_1_options = student_language_1_options()
+    language_options = student_language_options()
+    os_options = student_os_options()
+    oc_options = student_oc_options()
 
     if user_id is not None:
         db = get_db()
@@ -50,13 +63,16 @@ def create():
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 min-height: 100vh;
                 padding: 20px 20px 100px 20px;
+                overflow-x: hidden;
+                width: 100%;
             }
             .profil-card {
                 background: white;
                 padding: 30px;
                 border-radius: 20px;
                 box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-                max-width: 600px;
+                width: min(600px, 100%);
+                max-width: 100%;
                 margin: 0 auto;
             }
             .profil-header {
@@ -90,6 +106,49 @@ def create():
             .info-value {
                 color: #333;
             }
+            .profil-card .row {
+                width: 100%;
+                flex-wrap: wrap;
+            }
+            .profil-card .row > * {
+                min-width: 0;
+            }
+            .profil-card .q-field__label {
+                opacity: 1 !important;
+                color: #666 !important;
+            }
+            .profil-card .q-field--outlined .q-field__control::before,
+            .profil-card .q-field--outlined .q-field__control::after,
+            .profil-card .q-field--outlined.q-field--focused .q-field__control::before,
+            .profil-card .q-field--outlined.q-field--focused .q-field__control::after {
+                border-color: var(--border-light) !important;
+                box-shadow: none !important;
+            }
+            .profil-card .q-field--focused .q-field__control::after {
+                border-width: 1px !important;
+            }
+            .profil-card .q-field--focused .q-field__native,
+            .profil-card .q-field--focused .q-field__prefix,
+            .profil-card .q-field--focused .q-field__suffix,
+            .profil-card .q-field--focused .q-field__input {
+                color: var(--text-dark) !important;
+            }
+            .profil-card .q-field__native,
+            .profil-card .q-field__input,
+            .profil-card .q-select__selection,
+            .profil-card .q-select__dropdown-icon {
+                color: var(--text-dark) !important;
+                opacity: 1 !important;
+            }
+            @media (max-width: 520px) {
+                .profil-container {
+                    padding: 12px 12px 92px 12px;
+                }
+                .profil-card {
+                    padding: 16px;
+                    border-radius: 14px;
+                }
+            }
         </style>
     ''')
     
@@ -100,7 +159,7 @@ def create():
                 # Avatar
                 with ui.element('div').style('width: 80px; height: 80px; background: #667eea; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;'):
                     ui.icon('person', size='48px', color='white')
-                
+
                 ui.html('<div class="profil-title">Profil</div>', sanitize=False)
             
             # Section Compte
@@ -113,14 +172,12 @@ def create():
             
             # Section École
             ui.html('<div class="section-title">École</div>', sanitize=False)
-            
+
+            if classe_value and classe_value not in classes_catalog:
+                classes_catalog = classes_catalog + [classe_value]
+
             classe_select = ui.select(
-                [
-                    *[f'1GY{i}' for i in range(1, 13)],
-                    *[f'4GY{i}' for i in range(1, 13)],
-                    *[f'3GY{i}' for i in range(1, 13)],
-                    *[f'2GY{i}' for i in range(1, 13)],
-                ],
+                classes_catalog,
                 label='Classe',
                 value=classe_value
             ).props('outlined').classes('w-full q-mb-md')
@@ -131,15 +188,22 @@ def create():
                 value=niveau_maths_value
             ).props('outlined').classes('w-full q-mb-md')
             
+            if langue1_value and langue1_value not in language_1_options:
+                language_1_options = language_1_options + [langue1_value]
+            if langue2_value and langue2_value not in language_options:
+                language_options = language_options + [langue2_value]
+            if langue3_value and langue3_value not in language_options:
+                language_options = language_options + [langue3_value]
+
             with ui.row().classes('w-full gap-2'):
                 langue1 = ui.select(
-                    ['Français'],
+                    language_1_options,
                     label='Langue 1',
                     value=langue1_value
                 ).props('outlined').classes('flex-1')
 
                 langue2 = ui.select(
-                    ['Allemand', 'Anglais', 'Espagnol', 'Grec', 'Italien', 'Latin (débutants)', 'Latin (avancés)'],
+                    language_options,
                     label='Langue 2',
                     value=langue2_value
                 ).props('outlined').classes('flex-1')
@@ -147,7 +211,7 @@ def create():
             ui.space().classes('h-4')
             
             langue3 = ui.select(
-                ['Allemand', 'Anglais', 'Espagnol', 'Grec', 'Italien', 'Latin (débutants)', 'Latin (avancés)'],
+                language_options,
                 label='Langue 3',
                 value=langue3_value
             ).props('outlined').classes('w-full q-mb-md')
@@ -155,17 +219,19 @@ def create():
             # Section Options
             ui.html('<div class="section-title">Options</div>', sanitize=False)
             
+            if os_value and os_value not in os_options:
+                os_options = os_options + [os_value]
+            if oc_value and oc_value not in oc_options:
+                oc_options = oc_options + [oc_value]
+
             os_input = ui.select(
-                ['Arts visuels', 'Anglais', 'Biologie et chimie', 'Économie et droit', 'Espagnol', 'Grec', 'Italien',
-                 'Latin (débutants)', 'Latin (avancés)', 'Musique', 'Physique et application des mathématiques'],
+                os_options,
                 label='Option spécifique (OS)',
                 value=os_value
             ).props('outlined').classes('w-full q-mb-md')
 
             oc_input = ui.select(
-                ['Applications des mathématiques', 'Arts visuels', 'Biologie', 'Chimie', 'Économie et droit', 'Géographie',
-                 'Histoire', 'Informatique', 'Musique', 'Philosophie', 'Physique', 'Psychologie et pédagogie',
-                 'Sciences politiques', 'Sciences religieuses', 'Sport'],
+                oc_options,
                 label='Option complémentaire (OC)',
                 value=oc_value
             ).props('outlined').classes('w-full q-mb-md')
@@ -177,8 +243,42 @@ def create():
             # Boutons d'action
             with ui.row().classes('w-full gap-4 q-mt-lg'):
                 async def handle_save():
-                    # TODO: Sauvegarder les modifications
-                    ui.notify('Profil mis à jour avec succès!', type='positive')
+                    db = get_db()
+                    try:
+                        user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
+                        eleve = db.query(Eleve).filter(Eleve.utilisateur_id == user_id).first()
+                        if user is None or eleve is None:
+                            ui.notify('Profil introuvable', type='negative')
+                            return
+
+                        user.nom = (nom_input.value or '').strip() or user.nom
+                        user.prenom = (prenom_input.value or '').strip() or user.prenom
+                        new_password = (password_input.value or '').strip()
+                        if new_password:
+                            if len(new_password) < 8:
+                                ui.notify('Le mot de passe doit contenir au minimum 8 caractères', type='negative')
+                                return
+                            user.mot_de_passe = hash_password(new_password)
+
+                        eleve.classe = (classe_select.value or '').strip() or eleve.classe
+                        eleve.niveau_maths = (maths_select.value or '').strip() or eleve.niveau_maths
+                        eleve.langue1 = (langue1.value or '').strip() or eleve.langue1
+                        eleve.langue2 = (langue2.value or '').strip() or eleve.langue2
+                        eleve.langue3 = (langue3.value or '').strip() or eleve.langue3
+                        eleve.os = (os_input.value or '').strip() or eleve.os
+                        eleve.oc = (oc_input.value or '').strip() or eleve.oc
+                        eleve.basic_english = bool(basic_english.value)
+                        eleve.bilingue = bool(bilingue.value)
+
+                        db.commit()
+                        app.storage.user['nom'] = user.nom
+                        app.storage.user['prenom'] = user.prenom
+                        ui.notify('Profil mis à jour avec succès!', type='positive')
+                    except Exception:
+                        db.rollback()
+                        ui.notify('Erreur lors de la sauvegarde du profil', type='negative')
+                    finally:
+                        db.close()
                 
                 async def handle_logout():
                     app.storage.user.clear()

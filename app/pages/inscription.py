@@ -4,6 +4,14 @@ from nicegui import ui, app
 from database.database import get_db
 from database.models import Utilisateur, Eleve, Enseignant, RoleEnum
 from utils.auth import hash_password
+from utils.school import (
+    all_school_classes,
+    all_teaching_subjects,
+    student_language_1_options,
+    student_language_options,
+    student_oc_options,
+    student_os_options,
+)
 
 
 def is_valid_email(email: str) -> bool:
@@ -23,9 +31,10 @@ def create():
                 padding: 20px 20px 100px 20px;
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 overflow-x: hidden;
+                width: 100%;
             }
             .inscription-card {
-                width: 370px;
+                width: min(370px, 100%);
                 max-width: 100%;
                 background: var(--white);
                 padding: 20px;
@@ -39,7 +48,7 @@ def create():
                 color: var(--text-dark);
                 font-size: 28px;
                 font-weight: 700;
-                margin-bottom: 12px;
+                margin-bottom: 16px;
             }
             .section-title {
                 color: var(--primary);
@@ -49,38 +58,46 @@ def create():
                 padding-bottom: 6px;
                 border-bottom: 2px solid var(--secondary);
             }
-            .inscription-subtitle {
-                width: 100%;
-                height: 32px;
-                background-color: var(--secondary);
-                border-radius: 8px;
-                display: flex;
-                justify-content: center;
-                align-items: center;
-                color: var(--white);
-                font-size: 14px;
-                font-weight: 600;
-                margin-bottom: 12px;
-            }
             .two-cols {
                 display: grid;
                 grid-template-columns: 1fr 1fr;
                 gap: 8px;
                 width: 100%;
             }
+            .inscription-card .q-field {
+                padding: 0 8px;
+                box-sizing: border-box;
+            }
             .inscription-card .q-field__control {
-                border-radius: 12px !important;
+                border-radius: 8px !important;
+            }
+            @media (max-width: 520px) {
+                .inscription-container {
+                    padding: 12px 12px 92px 12px;
+                }
+                .inscription-card {
+                    padding: 14px;
+                    border-radius: 14px;
+                }
+                .two-cols {
+                    grid-template-columns: 1fr;
+                }
             }
         </style>
     ''')
 
     student_fields: dict[str, any] = {}
     teacher_fields: dict[str, any] = {}
+    classes_catalog = all_school_classes()
+    teaching_subjects = all_teaching_subjects()
+    language_1_options = student_language_1_options()
+    language_options = student_language_options()
+    os_options = student_os_options()
+    oc_options = student_oc_options()
     
     with ui.column().classes('inscription-container'):
         with ui.card().classes('inscription-card'):
             ui.html('<div class="inscription-title">Inscription</div>', sanitize=False)
-            ui.html('<div class="inscription-subtitle">Création de compte</div>', sanitize=False)
             
             # Choix du rôle
             ui.html('<div class="section-title">Choisissez votre rôle</div>', sanitize=False)
@@ -135,12 +152,7 @@ def create():
                 ui.html('<div class="section-title">Informations scolaires</div>', sanitize=False)
 
                 student_fields['classe'] = ui.select(
-                    [
-                        *[f'1GY{i}' for i in range(1, 13)],
-                        *[f'4GY{i}' for i in range(1, 13)],
-                        *[f'3GY{i}' for i in range(1, 13)],
-                        *[f'2GY{i}' for i in range(1, 13)],
-                    ],
+                    classes_catalog,
                     label='Classe',
                     value='1GY1'
                 ).props('outlined').classes('w-full q-mb-md')
@@ -153,19 +165,19 @@ def create():
 
                 with ui.element('div').classes('two-cols'):
                     student_fields['langue1'] = ui.select(
-                        ['Français'],
+                        language_1_options,
                         label='Langue 1',
                         value='Français'
                     ).props('outlined').classes('flex-1')
 
                     student_fields['langue2'] = ui.select(
-                        ['Allemand', 'Anglais', 'Espagnol', 'Grec', 'Italien', 'Latin (débutants)', 'Latin (avancés)'],
+                        language_options,
                         label='Langue 2',
                         value='Anglais'
                     ).props('outlined').classes('flex-1')
 
                 student_fields['langue3'] = ui.select(
-                    ['Allemand', 'Anglais', 'Espagnol', 'Grec', 'Italien', 'Latin (débutants)', 'Latin (avancés)'],
+                    language_options,
                     label='Langue 3',
                     value='Espagnol'
                 ).props('outlined').classes('w-full q-mb-md')
@@ -173,16 +185,13 @@ def create():
                 ui.html('<div class="section-title">Options</div>', sanitize=False)
 
                 student_fields['os'] = ui.select(
-                    ['Arts visuels', 'Anglais', 'Biologie et chimie', 'Économie et droit', 'Espagnol', 'Grec', 'Italien',
-                     'Latin (débutants)', 'Latin (avancés)', 'Musique', 'Physique et application des mathématiques'],
+                    os_options,
                     label='Option spécifique (OS)',
                     value='Physique et application des mathématiques'
                 ).props('outlined').classes('w-full q-mb-md')
 
                 student_fields['oc'] = ui.select(
-                    ['Applications des mathématiques', 'Arts visuels', 'Biologie', 'Chimie', 'Économie et droit', 'Géographie',
-                     'Histoire', 'Informatique', 'Musique', 'Philosophie', 'Physique', 'Psychologie et pédagogie',
-                     'Sciences politiques', 'Sciences religieuses', 'Sport'],
+                    oc_options,
                     label='Option complémentaire (OC)',
                     value='Physique'
                 ).props('outlined').classes('w-full q-mb-md')
@@ -194,25 +203,56 @@ def create():
             def create_teacher_fields():
                 """Crée les champs spécifiques aux enseignants"""
                 ui.html('<div class="section-title">Informations professionnelles</div>', sanitize=False)
-                
-                teacher_fields['branches'] = ui.input(
-                    'Branche(s) enseignée(s)',
-                    placeholder='Ex: Mathématiques, Physique'
+
+                teacher_fields['branches'] = ui.select(
+                    teaching_subjects,
+                    label='Branches enseignées',
+                    value=[],
+                    multiple=True,
                 ).props('outlined').classes('w-full q-mb-md')
+
+                teacher_fields['classes_search'] = ui.input(
+                    'Recherche classes',
+                    placeholder='Ex: 2GY1'
+                ).props('outlined').classes('w-full q-mb-sm')
+                teacher_fields['classes_selected'] = set()
+                teacher_fields['classes_checkboxes'] = []
+                teacher_fields['classes_box'] = ui.column().classes('w-full q-mb-md').style('max-height: 180px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 8px;')
+
+                def render_classes(filter_value: str = '') -> None:
+                    classes_box = teacher_fields['classes_box']
+                    classes_box.clear()
+                    teacher_fields['classes_checkboxes'].clear()
+
+                    normalized = (filter_value or '').strip().lower()
+                    filtered_classes = [
+                        class_name
+                        for class_name in classes_catalog
+                        if normalized in class_name.lower()
+                    ]
+
+                    with classes_box:
+                        for class_name in filtered_classes:
+                            checkbox = ui.checkbox(
+                                class_name,
+                                value=class_name in teacher_fields['classes_selected'],
+                            )
+
+                            def on_change(event, cls=class_name):
+                                if event.value:
+                                    teacher_fields['classes_selected'].add(cls)
+                                else:
+                                    teacher_fields['classes_selected'].discard(cls)
+
+                            checkbox.on_value_change(on_change)
+                            teacher_fields['classes_checkboxes'].append(checkbox)
+
+                teacher_fields['classes_search'].on_value_change(
+                    lambda event: render_classes(event.value or '')
+                )
+                render_classes()
                 
-                teacher_fields['classes'] = ui.input(
-                    'Classe(s)',
-                    placeholder='Ex: 9VG1, 10VG2, 11VG3'
-                ).props('outlined').classes('w-full q-mb-md')
-                
-                ui.html('<div class="section-title">Options enseignées</div>')
-                
-                teacher_fields['os'] = ui.input('Option spécifique (OS)').props('outlined').classes('w-full q-mb-md')
-                teacher_fields['oc'] = ui.input('Option complémentaire (OC)').props('outlined').classes('w-full q-mb-md')
-                
-                with ui.element('div').classes('two-cols'):
-                    teacher_fields['basic_english'] = ui.checkbox('Basic English')
-                    teacher_fields['bilingue'] = ui.checkbox('Cours bilingues')
+                teacher_fields['bilingue'] = ui.checkbox('Cours bilingues').classes('q-mb-md')
             
             # Initialisation des champs
             role_select.on_value_change(update_role_fields)
@@ -275,13 +315,19 @@ def create():
                                 bilingue=bool(student_fields['bilingue'].value),
                             ))
                         else:
+                            selected_branches = teacher_fields['branches'].value or []
+                            selected_classes = sorted(teacher_fields['classes_selected'])
+                            if not selected_classes:
+                                ui.notify('Merci de sélectionner au moins une classe', type='negative')
+                                return
+
                             db.add(Enseignant(
                                 utilisateur_id=user.id,
-                                branches=(teacher_fields['branches'].value or '').strip(),
-                                classes=(teacher_fields['classes'].value or '').strip(),
-                                os=(teacher_fields['os'].value or '').strip(),
-                                oc=(teacher_fields['oc'].value or '').strip(),
-                                basic_english=bool(teacher_fields['basic_english'].value),
+                                branches=','.join(selected_branches),
+                                classes=','.join(selected_classes),
+                                os='',
+                                oc='',
+                                basic_english=('Basic English' in selected_branches),
                                 bilingue=bool(teacher_fields['bilingue'].value),
                             ))
 
