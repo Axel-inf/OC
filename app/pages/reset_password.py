@@ -25,11 +25,10 @@ RESET_CODE_TTL_MINUTES = 15
 
 
 def _generate_reset_code(length: int = RESET_CODE_LENGTH) -> str:
-    alphabet = string.ascii_uppercase + string.digits
-    return ''.join(secrets.choice(alphabet) for _ in range(length))
+    return ''.join(secrets.choice(string.digits) for _ in range(length))
 
 
-def _send_reset_email(recipient_email: str, code: str) -> None:
+def _send_reset_email(recipient_email: str, code: str, full_name: str) -> None:
     if not SMTP_HOST:
         raise RuntimeError('Configuration SMTP manquante (SMTP_HOST).')
 
@@ -42,8 +41,11 @@ def _send_reset_email(recipient_email: str, code: str) -> None:
     message['From'] = sender
     message['To'] = recipient_email
     message.set_content(
+        f'Bonjour {full_name},\n\n'
         f'Votre code de réinitialisation est : {code}\n\n'
-        f'Ce code expire dans {RESET_CODE_TTL_MINUTES} minutes.'
+        f'Saisissez ce code sur la page de réinitialisation.\n'
+        f'Ce code expire dans {RESET_CODE_TTL_MINUTES} minutes.\n\n'
+        'Si vous n\'êtes pas à l\'origine de cette demande, ignorez cet email.'
     )
 
     if SMTP_USE_TLS:
@@ -140,7 +142,7 @@ def create():
             with verification_container:
                 code_input = ui.input(
                     label='Code de vérification',
-                    placeholder='6 caractères',
+                    placeholder='6 chiffres',
                 ).classes('w-full q-mb-md').props('outlined maxlength=6')
 
                 new_password_input = ui.input(
@@ -182,7 +184,8 @@ def create():
                 app.storage.general['password_reset_codes'] = reset_store
 
                 try:
-                    _send_reset_email(email, code)
+                    full_name = f'{user.prenom} {user.nom}'.strip()
+                    _send_reset_email(email, code, full_name or 'utilisateur')
                 except Exception as exc:
                     ui.notify(f"Impossible d'envoyer l'email: {exc}", type='negative')
                     return
@@ -192,12 +195,16 @@ def create():
 
             async def handle_confirm_reset():
                 email = (email_input.value or '').strip().lower()
-                code_value = (code_input.value or '').strip().upper()
+                code_value = (code_input.value or '').strip()
                 new_password = new_password_input.value or ''
                 confirm_password = confirm_password_input.value or ''
 
                 if not email or not code_value or not new_password or not confirm_password:
                     ui.notify('Merci de remplir tous les champs.', type='negative')
+                    return
+
+                if len(code_value) != RESET_CODE_LENGTH or not code_value.isdigit():
+                    ui.notify('Le code doit contenir exactement 6 chiffres.', type='negative')
                     return
 
                 if len(new_password) < 8:
@@ -256,6 +263,6 @@ def create():
                 ui.notify('Mot de passe réinitialisé. Connexion réussie.', type='positive')
                 ui.navigate.to('/accueil')
 
-            ui.button('ENVOYER', on_click=handle_reset).classes('reset-button')
+            ui.button('RENVOYER LE CODE', on_click=handle_reset).classes('reset-button')
             validate_button.on('click', handle_confirm_reset)
             ui.html('<div class="back-link"><a href="/login">Retour à la connexion</a></div>', sanitize=False)

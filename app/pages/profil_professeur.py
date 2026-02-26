@@ -42,17 +42,20 @@ def create():
     ui.add_head_html('''
         <style>
             .profil-container {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: var(--white);
                 min-height: 100vh;
                 padding: 20px 20px 100px 20px;
                 overflow-x: hidden;
                 width: 100%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
             }
             .profil-card {
-                background: white;
-                padding: 30px;
-                border-radius: 20px;
-                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                background: transparent;
+                padding: 0;
+                border-radius: 0;
+                box-shadow: none;
                 width: min(600px, 100%);
                 max-width: 100%;
                 margin: 0 auto;
@@ -92,6 +95,9 @@ def create():
                 opacity: 1 !important;
                 color: #666 !important;
             }
+            .profil-card .q-field--outlined .q-field__label {
+                left: 8px !important;
+            }
             .profil-card .q-field--outlined .q-field__control::before,
             .profil-card .q-field--outlined .q-field__control::after,
             .profil-card .q-field--outlined.q-field--focused .q-field__control::before,
@@ -101,6 +107,7 @@ def create():
             }
             .profil-card .q-field--focused .q-field__control::after {
                 border-width: 1px !important;
+                border-color: var(--border-light) !important;
             }
             .profil-card .q-field--focused .q-field__native,
             .profil-card .q-field--focused .q-field__prefix,
@@ -108,12 +115,24 @@ def create():
             .profil-card .q-field--focused .q-field__input {
                 color: var(--text-dark) !important;
             }
+            .profil-card .q-field--focused .q-field__label,
+            .profil-card .q-select--focused .q-field__label,
+            .profil-card .q-select--focused .q-select__dropdown-icon {
+                color: #666 !important;
+            }
             .profil-card .q-field__native,
             .profil-card .q-field__input,
             .profil-card .q-select__selection,
             .profil-card .q-select__dropdown-icon {
                 color: var(--text-dark) !important;
                 opacity: 1 !important;
+            }
+            .profil-card .q-select .q-field__native {
+                justify-content: center;
+            }
+            .profil-card .q-select .q-field__native > span {
+                width: 100%;
+                text-align: center;
             }
             .field-caption {
                 width: 100%;
@@ -126,8 +145,8 @@ def create():
                     padding: 12px 12px 92px 12px;
                 }
                 .profil-card {
-                    padding: 16px;
-                    border-radius: 14px;
+                    padding: 0;
+                    border-radius: 0;
                 }
             }
         </style>

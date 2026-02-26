@@ -60,30 +60,39 @@ def create():
     ui.add_head_html('''
         <style>
             .profil-container {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: var(--white);
                 min-height: 100vh;
                 padding: 20px 20px 100px 20px;
                 overflow-x: hidden;
                 width: 100%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
             }
             .profil-card {
-                background: white;
-                padding: 30px;
-                border-radius: 20px;
-                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+                background: transparent;
+                padding: 0;
+                border-radius: 0;
+                box-shadow: none;
                 width: min(600px, 100%);
                 max-width: 100%;
                 margin: 0 auto;
             }
             .profil-header {
+                width: 100%;
+                display: flex;
+                justify-content: center;
+                align-items: center;
                 text-align: center;
-                margin-bottom: 30px;
+                margin-bottom: 20px;
             }
             .profil-title {
                 font-size: 28px;
                 font-weight: 700;
                 color: #333;
-                margin-top: 15px;
+                margin: 0 auto;
+                width: 100%;
+                text-align: center;
             }
             .section-title {
                 font-size: 18px;
@@ -117,6 +126,9 @@ def create():
                 opacity: 1 !important;
                 color: #666 !important;
             }
+            .profil-card .q-field--outlined .q-field__label {
+                left: 8px !important;
+            }
             .profil-card .q-field--outlined .q-field__control::before,
             .profil-card .q-field--outlined .q-field__control::after,
             .profil-card .q-field--outlined.q-field--focused .q-field__control::before,
@@ -126,12 +138,18 @@ def create():
             }
             .profil-card .q-field--focused .q-field__control::after {
                 border-width: 1px !important;
+                border-color: var(--border-light) !important;
             }
             .profil-card .q-field--focused .q-field__native,
             .profil-card .q-field--focused .q-field__prefix,
             .profil-card .q-field--focused .q-field__suffix,
             .profil-card .q-field--focused .q-field__input {
                 color: var(--text-dark) !important;
+            }
+            .profil-card .q-field--focused .q-field__label,
+            .profil-card .q-select--focused .q-field__label,
+            .profil-card .q-select--focused .q-select__dropdown-icon {
+                color: #666 !important;
             }
             .profil-card .q-field__native,
             .profil-card .q-field__input,
@@ -140,13 +158,20 @@ def create():
                 color: var(--text-dark) !important;
                 opacity: 1 !important;
             }
+            .profil-card .q-select .q-field__native {
+                justify-content: center;
+            }
+            .profil-card .q-select .q-field__native > span {
+                width: 100%;
+                text-align: center;
+            }
             @media (max-width: 520px) {
                 .profil-container {
                     padding: 12px 12px 92px 12px;
                 }
                 .profil-card {
-                    padding: 16px;
-                    border-radius: 14px;
+                    padding: 0;
+                    border-radius: 0;
                 }
             }
         </style>
@@ -156,10 +181,6 @@ def create():
         with ui.card().classes('profil-card'):
             # En-tête du profil
             with ui.element('div').classes('profil-header'):
-                # Avatar
-                with ui.element('div').style('width: 80px; height: 80px; background: #667eea; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto;'):
-                    ui.icon('person', size='48px', color='white')
-
                 ui.html('<div class="profil-title">Profil</div>', sanitize=False)
             
             # Section Compte

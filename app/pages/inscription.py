@@ -29,18 +29,21 @@ def create():
             .inscription-container {
                 min-height: 100vh;
                 padding: 20px 20px 100px 20px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: var(--white);
                 overflow-x: hidden;
                 width: 100%;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
             }
             .inscription-card {
                 width: min(370px, 100%);
                 max-width: 100%;
-                background: var(--white);
-                padding: 20px;
-                border-radius: 20px;
-                border: 1px solid var(--border-light);
-                box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+                background: transparent;
+                padding: 0;
+                border-radius: 0;
+                border: none;
+                box-shadow: none;
                 margin: 0 auto;
             }
             .inscription-title {
@@ -48,7 +51,18 @@ def create():
                 color: var(--text-dark);
                 font-size: 28px;
                 font-weight: 700;
-                margin-bottom: 16px;
+                width: 100%;
+                display: block;
+                margin: 0 auto 16px;
+            }
+            .inscription-header {
+                width: 100%;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+            .inscription-card .q-field--outlined .q-field__label {
+                left: 8px !important;
             }
             .section-title {
                 color: var(--primary);
@@ -76,8 +90,8 @@ def create():
                     padding: 12px 12px 92px 12px;
                 }
                 .inscription-card {
-                    padding: 14px;
-                    border-radius: 14px;
+                    padding: 0;
+                    border-radius: 0;
                 }
                 .two-cols {
                     grid-template-columns: 1fr;
@@ -97,7 +111,8 @@ def create():
     
     with ui.column().classes('inscription-container'):
         with ui.card().classes('inscription-card'):
-            ui.html('<div class="inscription-title">Inscription</div>', sanitize=False)
+            with ui.element('div').classes('inscription-header'):
+                ui.html('<div class="inscription-title">Inscription</div>', sanitize=False)
             
             # Choix du rôle
             ui.html('<div class="section-title">Choisissez votre rôle</div>', sanitize=False)

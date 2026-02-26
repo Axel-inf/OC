@@ -11,7 +11,7 @@ def create():
             .login-container {
                 min-height: 100vh;
                 background: var(--white);
-                padding: 20px 20px 32px 20px;
+                padding: 42px 20px 32px 20px;
                 overflow-x: hidden;
                 width: 100%;
                 display: flex;
@@ -21,13 +21,13 @@ def create():
             .login-card {
                 width: min(370px, 100%);
                 max-width: 100%;
-                background: var(--white);
-                padding: 20px;
-                border-radius: 20px;
-                border: 1px solid var(--border-light);
-                box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+                background: transparent;
+                padding: 0;
+                border-radius: 0;
+                border: none;
+                box-shadow: none;
                 margin: 0 auto;
-                align-self: center;
+                align-self: flex-start;
             }
             .login-icon {
                 width: 64px;
@@ -44,7 +44,18 @@ def create():
                 color: var(--text-dark);
                 font-size: 28px;
                 font-weight: 700;
-                margin-bottom: 14px;
+                width: 100%;
+                display: block;
+                margin: 0 auto 14px;
+            }
+            .login-header {
+                width: 100%;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+            .login-card .q-field--outlined .q-field__label {
+                left: 8px !important;
             }
             .login-input {
                 width: 100%;
@@ -52,21 +63,20 @@ def create():
                 padding: 0 8px;
                 box-sizing: border-box;
             }
-            .password-help {
+            .password-row {
                 width: 100%;
-                text-align: left;
-                color: var(--text-light);
-                font-size: 12px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 8px;
                 margin-top: -6px;
-                margin-bottom: 10px;
-                padding: 0 8px;
-            }
-            .forgot-row {
-                width: 100%;
-                text-align: right;
-                margin-bottom: 14px;
+                margin-bottom: 12px;
                 padding: 0 8px;
                 box-sizing: border-box;
+            }
+            .password-help {
+                color: var(--text-light);
+                font-size: 12px;
             }
             .forgot-link {
                 color: var(--primary);
@@ -85,21 +95,12 @@ def create():
             }
             .login-divider {
                 width: 100%;
-                display: flex;
-                align-items: center;
+                text-align: center;
                 margin: 16px 0 12px 0;
-            }
-            .login-divider::before,
-            .login-divider::after {
-                content: '';
-                flex: 1;
-                height: 1px;
-                background: #c8c8c8;
             }
             .login-divider span {
                 color: var(--text-light);
                 font-size: 13px;
-                margin: 0 10px;
             }
             .signup-row {
                 width: 100%;
@@ -116,11 +117,11 @@ def create():
             }
             @media (max-width: 420px) {
                 .login-container {
-                    padding: 12px 12px 24px 12px;
+                    padding: 42px 12px 24px 12px;
                 }
                 .login-card {
-                    padding: 16px;
-                    border-radius: 14px;
+                    padding: 0;
+                    border-radius: 0;
                 }
             }
         </style>
@@ -128,7 +129,8 @@ def create():
     
     with ui.column().classes('login-container items-center justify-start'):
         with ui.card().classes('login-card'):
-            ui.html('<div class="login-title">Connexion</div>', sanitize=False)
+            with ui.element('div').classes('login-header'):
+                ui.html('<div class="login-title">Connexion</div>', sanitize=False)
 
             with ui.element('div').classes('login-icon'):
                 ui.icon('lock', size='48px', color='white')
@@ -145,9 +147,13 @@ def create():
                 password_toggle_button=True
             ).classes('login-input').props('outlined')
 
-            ui.html('<div class="password-help">8 caractères minimum</div>', sanitize=False)
-
-            ui.html('<div class="forgot-row"><a class="forgot-link" href="/reinitialisation-mot-de-passe">Mot de passe oublié?</a></div>', sanitize=False)
+            ui.html(
+                '<div class="password-row">'
+                '<span class="password-help">8 caractères minimum</span>'
+                '<a class="forgot-link" href="/reinitialisation-mot-de-passe">Mot de passe oublié?</a>'
+                '</div>',
+                sanitize=False,
+            )
             
             async def handle_login():
                 email = email_input.value

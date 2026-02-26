@@ -1,7 +1,13 @@
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+_SETTINGS_FILE = Path(__file__).resolve()
+_PROJECT_ROOT = _SETTINGS_FILE.parents[2]
+_APP_ROOT = _SETTINGS_FILE.parents[1]
+
+load_dotenv(_PROJECT_ROOT / '.env')
+load_dotenv(_APP_ROOT / '.env')
 
 # Configuration base de données
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./app.db')
@@ -22,6 +28,6 @@ CALENDAR_AUTO_ROLLOVER_MINUTE = int(os.getenv('CALENDAR_AUTO_ROLLOVER_MINUTE', '
 SMTP_HOST = os.getenv('SMTP_HOST', '').strip()
 SMTP_PORT = int(os.getenv('SMTP_PORT', '587'))
 SMTP_USERNAME = os.getenv('SMTP_USERNAME', '').strip()
-SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '').strip()
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD', '').replace(' ', '').strip()
 SMTP_FROM_EMAIL = os.getenv('SMTP_FROM_EMAIL', '').strip()
 SMTP_USE_TLS = os.getenv('SMTP_USE_TLS', 'True') == 'True'

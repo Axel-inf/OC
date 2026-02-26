@@ -45,7 +45,22 @@ Créez un fichier `.env` à la racine du projet :
 DATABASE_URL=sqlite:///./app.db
 SECRET_KEY=votre-clé-secrète-très-longue-et-complexe
 DEBUG=True
+
+# Email (réinitialisation mot de passe)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USE_TLS=True
+SMTP_USERNAME=votre.adresse@gmail.com
+SMTP_PASSWORD=votre_mot_de_passe_application_gmail
+SMTP_FROM_EMAIL=votre.adresse@gmail.com
 ```
+
+### Configuration Gmail (obligatoire pour l'envoi d'email)
+
+1. Activez la validation en 2 étapes sur votre compte Google.
+2. Créez un **mot de passe d'application** (Google Account > Sécurité > Mots de passe des applications).
+3. Utilisez ce mot de passe d'application dans `SMTP_PASSWORD` (pas votre mot de passe Google principal).
+4. Vérifiez que `SMTP_USERNAME` et `SMTP_FROM_EMAIL` correspondent à l'adresse Gmail utilisée.
 
 ### 5. Initialiser la base de données
 

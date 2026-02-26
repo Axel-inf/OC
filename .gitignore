@@ -14,3 +14,4 @@ __pycache__/
 .env
 instance/
 *.db
+.nicegui/
