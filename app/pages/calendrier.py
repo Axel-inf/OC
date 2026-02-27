@@ -212,12 +212,15 @@ def create():
     start_date = date.today()
     visible_days = 5
     past_days_pool = 30
+    future_event_dates = [event['date_obj'] for event in events if event['date_obj'] >= start_date]
+    furthest_future_date = max(future_event_dates, default=(start_date + timedelta(days=visible_days - 1)))
+    future_days_span = max(visible_days, (furthest_future_date - start_date).days + 1)
     all_days = [
         start_date - timedelta(days=offset)
         for offset in range(past_days_pool, 0, -1)
     ] + [
         start_date + timedelta(days=offset)
-        for offset in range(visible_days)
+        for offset in range(future_days_span)
     ]
 
     def open_form_for_day(target_date: date) -> None:
@@ -403,6 +406,7 @@ def create():
     
     with ui.column().classes('page-container'):
         ui.html('<div class="titre-container">Calendrier</div>', sanitize=False)
+
         ui.html('<div class="charge-travail-label">Charge de travail pour les 7 prochains jours</div>', sanitize=False)
         ui.html(
             f'''<div id="workload-container" class="charge-travail-container {workload_state_class}">

@@ -30,7 +30,6 @@ def standard_subjects() -> list[str]:
         'Anglais',
         'Histoire',
         'Géographie',
-        'Sciences',
         'Physique',
         'Chimie',
         'Biologie',

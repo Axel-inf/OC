@@ -6,11 +6,17 @@ from database.models import Utilisateur, Eleve, Enseignant, RoleEnum
 from utils.auth import hash_password
 from utils.school import (
     all_school_classes,
-    all_teaching_subjects,
     student_language_1_options,
     student_language_options,
     student_oc_options,
     student_os_options,
+)
+from utils.teacher_assignments import (
+    build_subject_options_for_class,
+    is_bilingual_choice_token,
+    serialize_teacher_assignments,
+    subject_from_choice_token,
+    token_to_html_label,
 )
 
 
@@ -103,7 +109,6 @@ def create():
     student_fields: dict[str, any] = {}
     teacher_fields: dict[str, any] = {}
     classes_catalog = all_school_classes()
-    teaching_subjects = all_teaching_subjects()
     language_1_options = student_language_1_options()
     language_options = student_language_options()
     os_options = student_os_options()
@@ -219,20 +224,56 @@ def create():
                 """Crée les champs spécifiques aux enseignants"""
                 ui.html('<div class="section-title">Informations professionnelles</div>', sanitize=False)
 
-                teacher_fields['branches'] = ui.select(
-                    teaching_subjects,
-                    label='Branches enseignées',
-                    value=[],
-                    multiple=True,
-                ).props('outlined').classes('w-full q-mb-md')
-
                 teacher_fields['classes_search'] = ui.input(
                     'Recherche classes',
                     placeholder='Ex: 2GY1'
                 ).props('outlined').classes('w-full q-mb-sm')
                 teacher_fields['classes_selected'] = set()
                 teacher_fields['classes_checkboxes'] = []
+                teacher_fields['class_branch_values'] = {}
+                teacher_fields['class_branch_selects'] = {}
                 teacher_fields['classes_box'] = ui.column().classes('w-full q-mb-md').style('max-height: 180px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 8px;')
+                teacher_fields['class_branches_box'] = ui.column().classes('w-full')
+
+                def render_class_branch_sections() -> None:
+                    branches_box = teacher_fields['class_branches_box']
+                    branch_values = teacher_fields['class_branch_values']
+                    teacher_fields['class_branch_selects'] = {}
+                    branches_box.clear()
+
+                    selected_classes = sorted(teacher_fields['classes_selected'])
+                    for class_name in list(branch_values.keys()):
+                        if class_name not in selected_classes:
+                            branch_values.pop(class_name, None)
+
+                    if not selected_classes:
+                        with branches_box:
+                            ui.label('Sélectionnez au moins une classe pour configurer les branches.').classes('field-caption q-mb-md')
+                        return
+
+                    with branches_box:
+                        for class_name in selected_classes:
+                            ui.html(f'<div class="section-title">{class_name}</div>', sanitize=False)
+                            options = build_subject_options_for_class(class_name)
+                            initial_tokens = set(branch_values.get(class_name, set()))
+                            allowed_values = set(options.keys())
+                            initial_values = [token for token in initial_tokens if token in allowed_values]
+
+                            class_select = ui.select(
+                                options,
+                                label=f'Cours donnés en {class_name}',
+                                value=initial_values,
+                                multiple=True,
+                            ).props('outlined options-html').classes('w-full q-mb-md')
+
+                            teacher_fields['class_branch_selects'][class_name] = class_select
+
+                            def on_change(event, cls=class_name):
+                                selected_values = event.value or []
+                                tokens = {str(token).strip() for token in selected_values if str(token).strip()}
+                                branch_values[cls] = tokens
+
+                            class_select.on_value_change(on_change)
 
                 def render_classes(filter_value: str = '') -> None:
                     classes_box = teacher_fields['classes_box']
@@ -258,6 +299,8 @@ def create():
                                     teacher_fields['classes_selected'].add(cls)
                                 else:
                                     teacher_fields['classes_selected'].discard(cls)
+                                    teacher_fields['class_branch_values'].pop(cls, None)
+                                render_class_branch_sections()
 
                             checkbox.on_value_change(on_change)
                             teacher_fields['classes_checkboxes'].append(checkbox)
@@ -266,8 +309,7 @@ def create():
                     lambda event: render_classes(event.value or '')
                 )
                 render_classes()
-                
-                teacher_fields['bilingue'] = ui.checkbox('Cours bilingues').classes('q-mb-md')
+                render_class_branch_sections()
             
             # Initialisation des champs
             role_select.on_value_change(update_role_fields)
@@ -330,20 +372,32 @@ def create():
                                 bilingue=bool(student_fields['bilingue'].value),
                             ))
                         else:
-                            selected_branches = teacher_fields['branches'].value or []
                             selected_classes = sorted(teacher_fields['classes_selected'])
                             if not selected_classes:
                                 ui.notify('Merci de sélectionner au moins une classe', type='negative')
                                 return
 
+                            class_branch_values = teacher_fields['class_branch_values']
+                            assignments_by_class: dict[str, list[str]] = {}
+                            for class_name in selected_classes:
+                                values = sorted(set(class_branch_values.get(class_name, set())))
+                                if not values:
+                                    ui.notify(f'Sélectionnez au moins une branche pour la classe {class_name}', type='negative')
+                                    return
+                                assignments_by_class[class_name] = values
+
+                            all_tokens = [token for values in assignments_by_class.values() for token in values]
+                            has_basic_english = any(subject_from_choice_token(token) == 'Basic English' for token in all_tokens)
+                            has_bilingual_course = any(is_bilingual_choice_token(token) for token in all_tokens)
+
                             db.add(Enseignant(
                                 utilisateur_id=user.id,
-                                branches=','.join(selected_branches),
+                                branches=serialize_teacher_assignments(assignments_by_class),
                                 classes=','.join(selected_classes),
                                 os='',
                                 oc='',
-                                basic_english=('Basic English' in selected_branches),
-                                bilingue=bool(teacher_fields['bilingue'].value),
+                                basic_english=has_basic_english,
+                                bilingue=has_bilingual_course,
                             ))
 
                         db.commit()

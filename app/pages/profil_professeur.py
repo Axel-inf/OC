@@ -4,19 +4,28 @@ from components.navbar import create_navbar
 from database.database import get_db
 from database.models import Utilisateur, Enseignant
 from utils.school import all_school_classes
-from utils.school import all_teaching_subjects
 from utils.auth import hash_password
+from utils.teacher_assignments import (
+    build_subject_options_for_class,
+    is_bilingual_choice_token,
+    parse_teacher_assignments,
+    serialize_teacher_assignments,
+    subject_from_choice_token,
+    token_to_html_label,
+    token_to_label,
+)
 
 def create():
     """Crée la page de profil pour un enseignant"""
     user_id = app.storage.user.get('user_id')
 
+    ui.add_head_html('<link rel="stylesheet" href="/static/css/custom.css">')
+
     nom_value = app.storage.user.get('nom', '')
     prenom_value = app.storage.user.get('prenom', '')
     email_value = app.storage.user.get('email', '')
     classes_values: list[str] = []
-    branches_values: list[str] = []
-    bilingue_value = False
+    class_branch_values: dict[str, set[str]] = {}
 
     if user_id is not None:
         db = get_db()
@@ -29,14 +38,16 @@ def create():
 
             enseignant = db.query(Enseignant).filter(Enseignant.utilisateur_id == user_id).first()
             if enseignant is not None:
-                classes_values = [item.strip() for item in (enseignant.classes or '').split(',') if item.strip()]
-                branches_values = [item.strip() for item in (enseignant.branches or '').split(',') if item.strip()]
-                bilingue_value = bool(enseignant.bilingue)
+                parsed_assignments = parse_teacher_assignments(enseignant.branches, enseignant.classes)
+                classes_values = sorted(parsed_assignments.keys())
+                class_branch_values = {
+                    class_name: set(tokens)
+                    for class_name, tokens in parsed_assignments.items()
+                }
         finally:
             db.close()
 
     class_catalog = all_school_classes()
-    teaching_subjects = all_teaching_subjects()
     selected_classes = set(classes_values)
     
     ui.add_head_html('''
@@ -71,18 +82,18 @@ def create():
             .profil-title {
                 font-size: 28px;
                 font-weight: 700;
-                color: #333;
+                color: var(--text-dark);
                 margin-top: 0;
                 width: 100%;
                 text-align: center;
             }
             .section-title {
-                font-size: 18px;
+                font-size: 16px;
                 font-weight: 600;
-                color: #667eea;
-                margin: 25px 0 15px 0;
-                padding-bottom: 8px;
-                border-bottom: 2px solid #667eea;
+                color: var(--primary);
+                margin: 16px 0 10px 0;
+                padding-bottom: 6px;
+                border-bottom: 2px solid var(--secondary);
             }
             .profil-card .row {
                 width: 100%;
@@ -91,54 +102,15 @@ def create():
             .profil-card .row > * {
                 min-width: 0;
             }
-            .profil-card .q-field__label {
-                opacity: 1 !important;
-                color: #666 !important;
-            }
             .profil-card .q-field--outlined .q-field__label {
                 left: 8px !important;
             }
-            .profil-card .q-field--outlined .q-field__control::before,
-            .profil-card .q-field--outlined .q-field__control::after,
-            .profil-card .q-field--outlined.q-field--focused .q-field__control::before,
-            .profil-card .q-field--outlined.q-field--focused .q-field__control::after {
-                border-color: var(--border-light) !important;
-                box-shadow: none !important;
+            .profil-card .q-field {
+                padding: 0 8px;
+                box-sizing: border-box;
             }
-            .profil-card .q-field--focused .q-field__control::after {
-                border-width: 1px !important;
-                border-color: var(--border-light) !important;
-            }
-            .profil-card .q-field--focused .q-field__native,
-            .profil-card .q-field--focused .q-field__prefix,
-            .profil-card .q-field--focused .q-field__suffix,
-            .profil-card .q-field--focused .q-field__input {
-                color: var(--text-dark) !important;
-            }
-            .profil-card .q-field--focused .q-field__label,
-            .profil-card .q-select--focused .q-field__label,
-            .profil-card .q-select--focused .q-select__dropdown-icon {
-                color: #666 !important;
-            }
-            .profil-card .q-field__native,
-            .profil-card .q-field__input,
-            .profil-card .q-select__selection,
-            .profil-card .q-select__dropdown-icon {
-                color: var(--text-dark) !important;
-                opacity: 1 !important;
-            }
-            .profil-card .q-select .q-field__native {
-                justify-content: center;
-            }
-            .profil-card .q-select .q-field__native > span {
-                width: 100%;
-                text-align: center;
-            }
-            .field-caption {
-                width: 100%;
-                font-size: 13px;
-                color: var(--text-light);
-                margin: 0 0 4px 0;
+            .profil-card .q-field__control {
+                border-radius: 8px !important;
             }
             @media (max-width: 520px) {
                 .profil-container {
@@ -161,16 +133,56 @@ def create():
             # Section Compte
             ui.html('<div class="section-title">Compte</div>', sanitize=False)
             
-            nom_input = ui.input('Nom', value=nom_value).props('outlined stack-label').classes('w-full q-mb-md')
-            prenom_input = ui.input('Prénom', value=prenom_value).props('outlined stack-label').classes('w-full q-mb-md')
-            email_input = ui.input('Email', value=email_value).props('outlined stack-label readonly').classes('w-full q-mb-md')
-            password_input = ui.input('Mot de passe', password=True, password_toggle_button=True).props('outlined stack-label').classes('w-full q-mb-md')
+            nom_input = ui.input('Nom', value=nom_value).props('outlined').classes('w-full q-mb-md')
+            prenom_input = ui.input('Prénom', value=prenom_value).props('outlined').classes('w-full q-mb-md')
+            email_input = ui.input('Email', value=email_value).props('outlined readonly').classes('w-full q-mb-md')
+            password_input = ui.input('Mot de passe', password=True, password_toggle_button=True).props('outlined').classes('w-full q-mb-md')
             
             # Section École
             ui.html('<div class="section-title">École</div>', sanitize=False)
             
             classes_search = ui.input('Recherche classes', placeholder='Ex: 2GY1').props('outlined').classes('w-full q-mb-sm')
             classes_box = ui.column().classes('w-full q-mb-md').style('max-height: 180px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 8px;')
+            class_branches_box = ui.column().classes('w-full')
+            class_branch_selects: dict[str, any] = {}
+
+            def render_class_branch_sections() -> None:
+                class_branches_box.clear()
+                class_branch_selects.clear()
+
+                ordered_classes = sorted(selected_classes)
+                for class_name in list(class_branch_values.keys()):
+                    if class_name not in ordered_classes:
+                        class_branch_values.pop(class_name, None)
+
+                if not ordered_classes:
+                    with class_branches_box:
+                        ui.label('Sélectionnez au moins une classe pour configurer les branches.').classes('field-caption q-mb-md')
+                    return
+
+                with class_branches_box:
+                    for class_name in ordered_classes:
+                        ui.html(f'<div class="section-title">{class_name}</div>', sanitize=False)
+                        options = build_subject_options_for_class(class_name)
+                        initial_tokens = set(class_branch_values.get(class_name, set()))
+                        allowed_values = set(options.keys())
+                        initial_values = [token for token in initial_tokens if token in allowed_values]
+
+                        class_select = ui.select(
+                            options,
+                            label=f'Cours donnés en {class_name}',
+                            value=initial_values,
+                            multiple=True,
+                        ).props('outlined options-html use-chips').classes('w-full q-mb-md')
+
+                        class_branch_selects[class_name] = class_select
+
+                        def on_change(event, cls=class_name):
+                            selected_values = event.value or []
+                            tokens = {str(token).strip() for token in selected_values if str(token).strip()}
+                            class_branch_values[cls] = tokens
+
+                        class_select.on_value_change(on_change)
 
             def render_classes(filter_value: str = '') -> None:
                 classes_box.clear()
@@ -190,22 +202,14 @@ def create():
                                 selected_classes.add(cls)
                             else:
                                 selected_classes.discard(cls)
+                                class_branch_values.pop(cls, None)
+                            render_class_branch_sections()
 
                         checkbox.on_value_change(on_change)
 
             classes_search.on_value_change(lambda event: render_classes(event.value or ''))
             render_classes()
-            
-            # Branches enseignées
-            ui.label('Branches enseignées').classes('field-caption')
-            branches_select = ui.select(
-                teaching_subjects,
-                label='Branches enseignées',
-                value=branches_values,
-                multiple=True
-            ).props('outlined stack-label').classes('w-full q-mb-md')
-
-            bilingue = ui.checkbox('Cours bilingues', value=bilingue_value).classes('q-mb-md')
+            render_class_branch_sections()
             
             # Boutons d'action
             with ui.row().classes('w-full gap-4 q-mt-lg'):
@@ -218,6 +222,22 @@ def create():
                             ui.notify('Profil introuvable', type='negative')
                             return
 
+                        if not selected_classes:
+                            ui.notify('Merci de sélectionner au moins une classe', type='negative')
+                            return
+
+                        assignments_by_class: dict[str, list[str]] = {}
+                        for class_name in sorted(selected_classes):
+                            values = sorted(set(class_branch_values.get(class_name, set())))
+                            if not values:
+                                ui.notify(f'Sélectionnez au moins une branche pour la classe {class_name}', type='negative')
+                                return
+                            assignments_by_class[class_name] = values
+
+                        all_tokens = [token for values in assignments_by_class.values() for token in values]
+                        has_basic_english = any(subject_from_choice_token(token) == 'Basic English' for token in all_tokens)
+                        has_bilingual_course = any(is_bilingual_choice_token(token) for token in all_tokens)
+
                         user.nom = (nom_input.value or '').strip() or user.nom
                         user.prenom = (prenom_input.value or '').strip() or user.prenom
                         new_password = (password_input.value or '').strip()
@@ -228,12 +248,11 @@ def create():
                             user.mot_de_passe = hash_password(new_password)
 
                         enseignant.classes = ','.join(sorted(selected_classes))
-                        selected_branches = branches_select.value or []
-                        enseignant.branches = ','.join(selected_branches)
+                        enseignant.branches = serialize_teacher_assignments(assignments_by_class)
                         enseignant.os = ''
                         enseignant.oc = ''
-                        enseignant.basic_english = ('Basic English' in selected_branches)
-                        enseignant.bilingue = bool(bilingue.value)
+                        enseignant.basic_english = has_basic_english
+                        enseignant.bilingue = has_bilingual_course
 
                         db.commit()
                         app.storage.user['nom'] = user.nom

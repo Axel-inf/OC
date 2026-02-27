@@ -1,4 +1,11 @@
 #aide de l'IA
+import sys
+from pathlib import Path
+
+_APP_DIR = Path(__file__).resolve().parents[1]
+if str(_APP_DIR) not in sys.path:
+    sys.path.insert(0, str(_APP_DIR))
+
 from nicegui import ui, app
 from components.navbar import create_navbar
 from database.database import get_db
@@ -15,6 +22,8 @@ from utils.school import (
 def create():
     """Crée la page de profil pour un élève"""
     user_id = app.storage.user.get('user_id')
+
+    ui.add_head_html('<link rel="stylesheet" href="/static/css/custom.css">')
 
     nom_value = app.storage.user.get('nom', '')
     prenom_value = app.storage.user.get('prenom', '')
@@ -59,7 +68,7 @@ def create():
     
     ui.add_head_html('''
         <style>
-            .profil-container {
+            .inscription-container {
                 background: var(--white);
                 min-height: 100vh;
                 padding: 20px 20px 100px 20px;
@@ -69,130 +78,89 @@ def create():
                 flex-direction: column;
                 align-items: center;
             }
-            .profil-card {
+            .inscription-card {
                 background: transparent;
                 padding: 0;
                 border-radius: 0;
+                border: none;
                 box-shadow: none;
-                width: min(600px, 100%);
+                width: min(370px, 100%);
                 max-width: 100%;
                 margin: 0 auto;
             }
-            .profil-header {
+            .inscription-header {
                 width: 100%;
                 display: flex;
                 justify-content: center;
                 align-items: center;
-                text-align: center;
-                margin-bottom: 20px;
             }
-            .profil-title {
+            .inscription-title {
+                text-align: center;
                 font-size: 28px;
                 font-weight: 700;
-                color: #333;
-                margin: 0 auto;
+                color: var(--text-dark);
                 width: 100%;
-                text-align: center;
+                display: block;
+                margin: 0 auto;
+                margin: 0 auto 16px;
             }
             .section-title {
-                font-size: 18px;
+                font-size: 16px;
                 font-weight: 600;
-                color: #667eea;
-                margin: 25px 0 15px 0;
-                padding-bottom: 8px;
-                border-bottom: 2px solid #667eea;
+                color: var(--primary);
+                margin: 16px 0 10px 0;
+                padding-bottom: 6px;
+                border-bottom: 2px solid var(--secondary);
             }
-            .info-row {
-                display: flex;
-                justify-content: space-between;
-                padding: 12px 0;
-                border-bottom: 1px solid #f0f0f0;
-            }
-            .info-label {
-                font-weight: 600;
-                color: #666;
-            }
-            .info-value {
-                color: #333;
-            }
-            .profil-card .row {
+            .two-cols {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
                 width: 100%;
-                flex-wrap: wrap;
             }
-            .profil-card .row > * {
-                min-width: 0;
-            }
-            .profil-card .q-field__label {
-                opacity: 1 !important;
-                color: #666 !important;
-            }
-            .profil-card .q-field--outlined .q-field__label {
+            .inscription-card .q-field--outlined .q-field__label {
                 left: 8px !important;
             }
-            .profil-card .q-field--outlined .q-field__control::before,
-            .profil-card .q-field--outlined .q-field__control::after,
-            .profil-card .q-field--outlined.q-field--focused .q-field__control::before,
-            .profil-card .q-field--outlined.q-field--focused .q-field__control::after {
-                border-color: var(--border-light) !important;
-                box-shadow: none !important;
+            .inscription-card .q-field {
+                padding: 0 8px;
+                box-sizing: border-box;
             }
-            .profil-card .q-field--focused .q-field__control::after {
-                border-width: 1px !important;
-                border-color: var(--border-light) !important;
-            }
-            .profil-card .q-field--focused .q-field__native,
-            .profil-card .q-field--focused .q-field__prefix,
-            .profil-card .q-field--focused .q-field__suffix,
-            .profil-card .q-field--focused .q-field__input {
-                color: var(--text-dark) !important;
-            }
-            .profil-card .q-field--focused .q-field__label,
-            .profil-card .q-select--focused .q-field__label,
-            .profil-card .q-select--focused .q-select__dropdown-icon {
-                color: #666 !important;
-            }
-            .profil-card .q-field__native,
-            .profil-card .q-field__input,
-            .profil-card .q-select__selection,
-            .profil-card .q-select__dropdown-icon {
-                color: var(--text-dark) !important;
-                opacity: 1 !important;
-            }
-            .profil-card .q-select .q-field__native {
-                justify-content: center;
-            }
-            .profil-card .q-select .q-field__native > span {
-                width: 100%;
-                text-align: center;
+            .inscription-card .q-field__control {
+                border-radius: 8px !important;
             }
             @media (max-width: 520px) {
-                .profil-container {
+                .inscription-container {
                     padding: 12px 12px 92px 12px;
                 }
-                .profil-card {
+                .inscription-card {
                     padding: 0;
                     border-radius: 0;
+                }
+                .two-cols {
+                    grid-template-columns: 1fr;
                 }
             }
         </style>
     ''')
     
-    with ui.column().classes('profil-container'):
-        with ui.card().classes('profil-card'):
+    with ui.column().classes('inscription-container'):
+        with ui.card().classes('inscription-card'):
             # En-tête du profil
-            with ui.element('div').classes('profil-header'):
-                ui.html('<div class="profil-title">Profil</div>', sanitize=False)
+            with ui.element('div').classes('inscription-header'):
+                ui.html('<div class="inscription-title">Profil</div>', sanitize=False)
             
             # Section Compte
-            ui.html('<div class="section-title">Compte</div>', sanitize=False)
-            
-            nom_input = ui.input('Nom', value=nom_value).props('outlined').classes('w-full q-mb-md')
-            prenom_input = ui.input('Prénom', value=prenom_value).props('outlined').classes('w-full q-mb-md')
+            ui.html('<div class="section-title">Informations personnelles</div>', sanitize=False)
+
+            with ui.element('div').classes('two-cols'):
+                nom_input = ui.input('Nom', value=nom_value).props('outlined').classes('flex-1')
+                prenom_input = ui.input('Prénom', value=prenom_value).props('outlined').classes('flex-1')
+
             email_input = ui.input('Email', value=email_value).props('outlined').classes('w-full q-mb-md')
             password_input = ui.input('Mot de passe', password=True, password_toggle_button=True).props('outlined').classes('w-full q-mb-md')
             
             # Section École
-            ui.html('<div class="section-title">École</div>', sanitize=False)
+            ui.html('<div class="section-title">Informations scolaires</div>', sanitize=False)
 
             if classe_value and classe_value not in classes_catalog:
                 classes_catalog = classes_catalog + [classe_value]
@@ -216,7 +184,7 @@ def create():
             if langue3_value and langue3_value not in language_options:
                 language_options = language_options + [langue3_value]
 
-            with ui.row().classes('w-full gap-2'):
+            with ui.element('div').classes('two-cols'):
                 langue1 = ui.select(
                     language_1_options,
                     label='Langue 1',
@@ -228,8 +196,6 @@ def create():
                     label='Langue 2',
                     value=langue2_value
                 ).props('outlined').classes('flex-1')
-            
-            ui.space().classes('h-4')
             
             langue3 = ui.select(
                 language_options,
@@ -257,7 +223,7 @@ def create():
                 value=oc_value
             ).props('outlined').classes('w-full q-mb-md')
             
-            with ui.column().classes('w-full gap-2'):
+            with ui.element('div').classes('two-cols'):
                 basic_english = ui.checkbox('Basic English', value=basic_english_value)
                 bilingue = ui.checkbox('Bilingue', value=bilingue_value)
             

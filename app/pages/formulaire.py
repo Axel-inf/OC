@@ -5,7 +5,10 @@ import re
 from datetime import date
 import calendar
 from database.calendar_repository import create_calendar_event
+from database.database import get_db
+from database.models import Utilisateur, Enseignant, Eleve
 from utils.school import all_teaching_subjects
+from utils.teacher_assignments import parse_teacher_assignments, split_choice_token, token_to_label
 
 
 MONTH_NAMES_FR = [
@@ -78,6 +81,39 @@ def parse_estimated_time_to_minutes(raw_value: str) -> int | None:
         return None
 
     return total_minutes
+
+
+def parse_estimated_time_to_minutes_strict(raw_value: str) -> int | None:
+    if not raw_value:
+        return None
+
+    normalized = raw_value.strip().lower().replace(',', '.')
+
+    compact_match = re.fullmatch(r'(\d+)\s*h\s*(\d{1,2})\s*(?:min|minute|minutes)?', normalized)
+    if compact_match:
+        hours_value = int(compact_match.group(1))
+        minutes_value = int(compact_match.group(2))
+        if minutes_value >= 60:
+            return None
+        total = (hours_value * 60) + minutes_value
+        return total if total > 0 else None
+
+    long_match = re.fullmatch(r'(\d+)\s*(?:heure|heures|h)\s*(\d{1,2})\s*(?:minute|minutes|min)', normalized)
+    if long_match:
+        hours_value = int(long_match.group(1))
+        minutes_value = int(long_match.group(2))
+        if minutes_value >= 60:
+            return None
+        total = (hours_value * 60) + minutes_value
+        return total if total > 0 else None
+
+    hours_only_match = re.fullmatch(r'(\d+)\s*(?:heure|heures|h)', normalized)
+    if hours_only_match:
+        hours_value = int(hours_only_match.group(1))
+        total = hours_value * 60
+        return total if total > 0 else None
+
+    return None
 
 
 def format_minutes_for_storage(total_minutes: int) -> str:
@@ -176,29 +212,34 @@ def create():
     ui.add_head_html('''
         <style>
             .formulaire-container {
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                background: var(--white);
                 min-height: 100vh;
                 padding: 20px 20px 100px 20px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
             }
             .formulaire-card {
-                background: white;
-                padding: 30px;
-                border-radius: 20px;
-                box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-                max-width: 600px;
+                background: transparent;
+                padding: 0;
+                border-radius: 0;
+                box-shadow: none;
+                width: min(370px, 100%);
+                max-width: 100%;
                 margin: 0 auto;
             }
             .form-title {
                 text-align: center;
                 font-size: 28px;
                 font-weight: 700;
-                color: #333;
-                margin-bottom: 30px;
+                color: var(--text-dark);
+                margin-bottom: 16px;
             }
             .add-icon-container {
                 width: 80px;
                 height: 80px;
-                background: #667eea;
+                background: var(--primary);
                 border-radius: 50%;
                 display: flex;
                 align-items: center;
@@ -242,7 +283,70 @@ def create():
         </style>
     ''')
     
+    role = app.storage.user.get('role')
     teaching_subjects = all_teaching_subjects()
+    teacher_assignments_by_class: dict[str, list[str]] = {}
+    class_to_students: dict[str, list[dict]] = {}
+    if role == 'enseignant':
+        user_email = app.storage.user.get('email')
+        db = get_db()
+        try:
+            teacher_user = db.query(Utilisateur).filter(Utilisateur.email == user_email).first()
+            if teacher_user is not None:
+                teacher_profile = db.query(Enseignant).filter(Enseignant.utilisateur_id == teacher_user.id).first()
+                if teacher_profile is not None:
+                    teacher_assignments_by_class = parse_teacher_assignments(teacher_profile.branches, teacher_profile.classes)
+
+            all_students = (
+                db.query(Eleve, Utilisateur)
+                .join(Utilisateur, Utilisateur.id == Eleve.utilisateur_id)
+                .all()
+            )
+            for student, user in all_students:
+                student_item = {
+                    'email': user.email,
+                    'profile': student,
+                }
+                class_to_students.setdefault(student.classe, []).append(student_item)
+        finally:
+            db.close()
+
+    def _student_has_subject(student_profile: Eleve, subject: str) -> bool:
+        normalized_subject = (subject or '').strip()
+        if not normalized_subject:
+            return False
+
+        if normalized_subject == 'Basic English':
+            return bool(student_profile.basic_english)
+
+        available = {
+            (student_profile.langue1 or '').strip(),
+            (student_profile.langue2 or '').strip(),
+            (student_profile.langue3 or '').strip(),
+            (student_profile.os or '').strip(),
+            (student_profile.oc or '').strip(),
+        }
+        available = {item for item in available if item}
+
+        if normalized_subject.startswith('OS '):
+            return (student_profile.os or '').strip() == normalized_subject.removeprefix('OS ').strip()
+        if normalized_subject.startswith('OC '):
+            return (student_profile.oc or '').strip() == normalized_subject.removeprefix('OC ').strip()
+
+        if normalized_subject in available:
+            return True
+
+        common_subjects = {
+            'Mathématiques', 'Français', 'Histoire', 'Géographie',
+            'Physique', 'Chimie', 'Biologie', 'Arts visuels', 'Éducation physique', 'Musique',
+        }
+        return normalized_subject in common_subjects
+
+    def _student_matches_assignment(student_profile: Eleve, subject_token: str) -> bool:
+        subject_name, track = split_choice_token(subject_token)
+        if track == 'bilingue' and not bool(student_profile.bilingue):
+            return False
+        return _student_has_subject(student_profile, subject_name)
 
     with ui.column().classes('formulaire-container'):
         with ui.card().classes('formulaire-card'):
@@ -268,11 +372,39 @@ def create():
                 with form_container:
                     # Champs communs
                     titre = ui.input('Titre').props('outlined').classes('w-full q-mb-md')
-                    
-                    branche = ui.select(
-                        teaching_subjects,
-                        label='Branche'
-                    ).props('outlined').classes('w-full q-mb-md')
+
+                    class_select = None
+                    if role == 'enseignant':
+                        available_classes = sorted(teacher_assignments_by_class.keys())
+                        class_select = ui.select(
+                            available_classes,
+                            label='Classe concernée',
+                            value=available_classes[0] if available_classes else None,
+                        ).props('outlined').classes('w-full q-mb-md')
+
+                        initial_tokens = teacher_assignments_by_class.get(class_select.value or '', [])
+                        initial_options = {token: token_to_label(token) for token in initial_tokens}
+                        branche = ui.select(
+                            initial_options,
+                            label='Branche',
+                            value=(next(iter(initial_options.keys())) if initial_options else None),
+                        ).props('outlined').classes('w-full q-mb-md')
+
+                        def refresh_teacher_branches() -> None:
+                            selected_class = class_select.value or ''
+                            options = {
+                                token: token_to_label(token)
+                                for token in teacher_assignments_by_class.get(selected_class, [])
+                            }
+                            branche.set_options(options)
+                            branche.value = next(iter(options.keys()), None)
+
+                        class_select.on_value_change(lambda _: refresh_teacher_branches())
+                    else:
+                        branche = ui.select(
+                            teaching_subjects,
+                            label='Branche'
+                        ).props('outlined').classes('w-full q-mb-md')
                     
                     description = ui.textarea(
                         'Description',
@@ -310,8 +442,15 @@ def create():
                             date_value = (date_examen.value or '').strip()
                             estimation_value = (temps_revision.value or '').strip()
 
+                        selected_class_value = ''
+                        if role == 'enseignant' and class_select is not None:
+                            selected_class_value = (class_select.value or '').strip()
+
                         if not titre_value or not branche_value or not date_value or not estimation_value:
                             ui.notify('Merci de remplir tous les champs obligatoires', type='negative')
+                            return
+                        if role == 'enseignant' and not selected_class_value:
+                            ui.notify('Merci de sélectionner une classe', type='negative')
                             return
 
                         parsed_date = parse_date_input(date_value)
@@ -319,31 +458,60 @@ def create():
                             ui.notify('Format de date invalide (ex: 13.01 ou 13.01.2026)', type='negative')
                             return
 
-                        parsed_estimation_minutes = parse_estimated_time_to_minutes(estimation_value)
+                        parsed_estimation_minutes = parse_estimated_time_to_minutes_strict(estimation_value)
                         if parsed_estimation_minutes is None:
-                            ui.notify('Format du temps invalide (ex: 1h30, 2 h, 45 min, 1 heure 15 min)', type='negative')
+                            ui.notify('Format du temps invalide: utilisez h ou h+min (ex: 1h, 1h30, 1 h 30 min)', type='negative')
                             return
 
                         normalized_estimation = format_minutes_for_storage(parsed_estimation_minutes)
 
                         event_type = type_event.value.lower()
-                        user_identifier = (
-                            app.storage.user.get('email')
-                            or str(app.storage.user.get('user_id') or '')
-                            or 'anonymous'
-                        )
-                        create_calendar_event(
-                            user_identifier=user_identifier,
-                            event_type=event_type,
-                            subject=branche_value,
-                            title=titre_value,
-                            description=description_value,
-                            date_iso=parsed_date.isoformat(),
-                            estimated_time=normalized_estimation,
-                            time_spent='0 minute',
-                        )
+                        if role == 'enseignant':
+                            subject_name, _ = split_choice_token(branche_value)
+                            students = class_to_students.get(selected_class_value, [])
+                            if not students:
+                                ui.notify(f'Aucun élève trouvé dans la classe {selected_class_value}', type='warning')
+                                return
 
-                        ui.notify(f'{type_event.value} ajouté avec succès!', type='positive')
+                            matching_students = [
+                                student
+                                for student in students
+                                if _student_matches_assignment(student['profile'], branche_value)
+                            ]
+                            if not matching_students:
+                                matching_students = students
+
+                            for student in matching_students:
+                                create_calendar_event(
+                                    user_identifier=student['email'],
+                                    event_type=event_type,
+                                    subject=subject_name,
+                                    title=titre_value,
+                                    description=description_value,
+                                    date_iso=parsed_date.isoformat(),
+                                    estimated_time=normalized_estimation,
+                                    time_spent='0 minute',
+                                )
+
+                            ui.notify(f'{type_event.value} ajouté pour {len(matching_students)} élève(s)', type='positive')
+                        else:
+                            user_identifier = (
+                                app.storage.user.get('email')
+                                or str(app.storage.user.get('user_id') or '')
+                                or 'anonymous'
+                            )
+                            create_calendar_event(
+                                user_identifier=user_identifier,
+                                event_type=event_type,
+                                subject=branche_value,
+                                title=titre_value,
+                                description=description_value,
+                                date_iso=parsed_date.isoformat(),
+                                estimated_time=normalized_estimation,
+                                time_spent='0 minute',
+                            )
+
+                            ui.notify(f'{type_event.value} ajouté avec succès!', type='positive')
                         ui.navigate.to('/calendrier')
                     
                     ui.button(

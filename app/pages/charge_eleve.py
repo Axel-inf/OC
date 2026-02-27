@@ -8,6 +8,7 @@ from database.database import get_db
 from database.models import Eleve, Utilisateur, Enseignant
 from database.calendar_repository import list_calendar_events_in_range, list_calendar_events_for_user
 from utils.school import sort_school_classes
+from utils.teacher_assignments import list_subjects_from_assignments, parse_teacher_assignments
 
 
 def _get_user_identifier() -> str:
@@ -45,10 +46,9 @@ def create():
         if teacher_user is not None:
             teacher_row = db.query(Enseignant).filter(Enseignant.utilisateur_id == teacher_user.id).first()
             if teacher_row:
-                if teacher_row.classes:
-                    teacher_classes = {item.strip() for item in teacher_row.classes.split(',') if item.strip()}
-                if teacher_row.branches:
-                    teacher_branches = [item.strip() for item in teacher_row.branches.split(',') if item.strip()]
+                teacher_assignments_by_class = parse_teacher_assignments(teacher_row.branches, teacher_row.classes)
+                teacher_classes = set(teacher_assignments_by_class.keys())
+                teacher_branches = list_subjects_from_assignments(teacher_assignments_by_class)
         teacher_branches = sorted(set(teacher_branches))
 
         teacher_row = (
@@ -67,10 +67,11 @@ def create():
             'email': user.email,
             'nom': user.nom,
             'prenom': user.prenom,
+            'profile': student,
         }
         class_to_students.setdefault(student.classe, []).append(student_item)
 
-    class_options = sort_school_classes(list(class_to_students.keys()))
+    class_options = sort_school_classes(sorted(set(class_to_students.keys()) | teacher_classes))
     default_class = class_options[0] if class_options else ''
     default_start = date.today()
     default_end = date.today()
@@ -81,7 +82,7 @@ def create():
     ui.add_head_html(f'<link rel="stylesheet" href="/static/css/custom.css?v={css_version}">')
 
     with ui.column().classes('stats-page-container'):
-        ui.html('<div class="titre-container">Charge de travail élève</div>', sanitize=False)
+        ui.html('<div class="titre-container">Statistiques</div>', sanitize=False)
 
         with ui.column().classes('stats-filter-card'):
             class_filter = ui.select(
@@ -135,12 +136,12 @@ def create():
                 checkbox.on_value_change(lambda event, b=branch_name: _on_toggle_branch(event, b))
 
             with ui.row().classes('w-full no-wrap gap-2'):
-                start_mode = ui.select(['Début', 'Date'], label='Début', value='Début').props('outlined dense').classes('flex-1')
+                start_mode = ui.select(['Début', 'Choisir une date'], label='Début', value='Début').props('outlined dense').classes('flex-1')
                 start_date_input = create_date_picker('Date de début', default_start)
                 start_date_input.classes('flex-1')
 
             with ui.row().classes('w-full no-wrap gap-2'):
-                end_mode = ui.select(['Aujourd\'hui', 'Date'], label='Fin', value='Aujourd\'hui').props('outlined dense').classes('flex-1')
+                end_mode = ui.select(['Aujourd\'hui', 'Choisir une date'], label='Fin', value='Aujourd\'hui').props('outlined dense').classes('flex-1')
                 end_date_input = create_date_picker('Date de fin', default_end)
                 end_date_input.classes('flex-1')
 
@@ -162,7 +163,7 @@ def create():
                         continue
 
             class_first_date = min(first_dates) if first_dates else default_start
-            if start_mode.value == 'Date':
+            if start_mode.value == 'Choisir une date':
                 picked = parse_date_input(start_date_input.value or '')
                 return picked or class_first_date
             return class_first_date
@@ -182,10 +183,45 @@ def create():
                         continue
 
             class_last_date = max(last_dates) if last_dates else default_end
-            if end_mode.value == 'Date':
+            if end_mode.value == 'Choisir une date':
                 picked = parse_date_input(end_date_input.value or '')
                 return picked or class_last_date
             return class_last_date
+
+        def _enforce_valid_date_range(changed_source: str | None = None) -> bool:
+            start_date = _resolve_start_date()
+            end_date = _resolve_end_date()
+            if start_date <= end_date:
+                return True
+
+            if changed_source == 'start':
+                ui.notify('La date de début est postérieure à la date de fin: la date de fin a été ajustée.', type='warning')
+                if end_mode.value != 'Choisir une date':
+                    end_mode.value = 'Choisir une date'
+                    end_date_input.set_visibility(True)
+                end_date_input.value = start_date.strftime('%d.%m.%Y')
+                return True
+
+            if changed_source == 'end':
+                ui.notify('La date de fin est antérieure à la date de début: la date de début a été ajustée.', type='warning')
+                if start_mode.value != 'Choisir une date':
+                    start_mode.value = 'Choisir une date'
+                    start_date_input.set_visibility(True)
+                start_date_input.value = end_date.strftime('%d.%m.%Y')
+                return True
+
+            ui.notify('La date de début doit être avant ou égale à la date de fin', type='warning')
+
+            if changed_source == 'start' and start_mode.value == 'Choisir une date':
+                start_date_input.value = end_date.strftime('%d.%m.%Y')
+            elif changed_source == 'end' and end_mode.value == 'Choisir une date':
+                end_date_input.value = start_date.strftime('%d.%m.%Y')
+            elif start_mode.value == 'Choisir une date':
+                start_date_input.value = end_date.strftime('%d.%m.%Y')
+            elif end_mode.value == 'Choisir une date':
+                end_date_input.value = start_date.strftime('%d.%m.%Y')
+
+            return False
 
         def _render() -> None:
             selected_class = class_filter.value or ''
@@ -193,7 +229,7 @@ def create():
             start_date = _resolve_start_date()
             end_date = _resolve_end_date()
             if end_date < start_date:
-                start_date, end_date = end_date, start_date
+                return
 
             names: list[str] = []
             real_hours: list[float] = []
@@ -256,15 +292,27 @@ def create():
                         }).classes('w-full stats-month-chart')
 
         def _update_visibility() -> None:
-            start_date_input.set_visibility(start_mode.value == 'Date')
-            end_date_input.set_visibility(end_mode.value == 'Date')
+            start_date_input.set_visibility(start_mode.value == 'Choisir une date')
+            end_date_input.set_visibility(end_mode.value == 'Choisir une date')
+            if not _enforce_valid_date_range():
+                return
+            _render()
+
+        def _on_start_date_change() -> None:
+            if not _enforce_valid_date_range('start'):
+                return
+            _render()
+
+        def _on_end_date_change() -> None:
+            if not _enforce_valid_date_range('end'):
+                return
             _render()
 
         class_filter.on_value_change(lambda _: _render())
         start_mode.on_value_change(lambda _: _update_visibility())
         end_mode.on_value_change(lambda _: _update_visibility())
-        start_date_input.on_value_change(lambda _: _render())
-        end_date_input.on_value_change(lambda _: _render())
+        start_date_input.on_value_change(lambda _: _on_start_date_change())
+        end_date_input.on_value_change(lambda _: _on_end_date_change())
 
         _update_visibility()
         create_navbar()

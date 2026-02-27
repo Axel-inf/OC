@@ -213,12 +213,12 @@ def create():
         with ui.element('div').classes('blue-footer'):
             if role == 'enseignant':
                 with ui.element('div').classes('white-card white-card-link').on(
-                    'click', lambda: ui.navigate.to('/charge-eleve')
+                    'click', lambda: ui.navigate.to('/statistiques')
                 ):
-                    ui.label("Consulter la charge des élèves") \
+                    ui.label("Consulter les statistiques") \
                         .style('display:block; text-align:center; font-size:16px; font-weight:600; margin-bottom:8px;')
 
-                    ui.icon('groups', size='32px') \
+                    ui.icon('bar_chart', size='32px') \
                         .style('display:block; margin: 0 auto;')
             else:
                 with ui.element('div').classes('white-card white-card-link').on(

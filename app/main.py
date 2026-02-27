@@ -4,6 +4,8 @@ import asyncio
 from datetime import datetime
 from nicegui import ui, app
 from fastapi import Body, HTTPException
+from database.database import get_db
+from database.models import Utilisateur
 from database.database import init_database
 from database.calendar_repository import (
     delete_calendar_event,
@@ -57,6 +59,7 @@ async def _calendar_rollover_loop() -> None:
 
 @app.on_event('startup')
 async def _start_calendar_rollover_loop() -> None:
+    app.storage.general['server_boot_id'] = datetime.now().isoformat()
     app.state.calendar_rollover_task = asyncio.create_task(_calendar_rollover_loop())
 
 
@@ -96,13 +99,38 @@ async def api_update_calendar_time_spent(payload: dict = Body(...)):
     return {'success': True}
 
 # Variable de session pour l'utilisateur connecté
+def _is_session_authenticated() -> bool:
+    if not app.storage.user.get('authenticated', False):
+        return False
+
+    user_id = app.storage.user.get('user_id')
+    email = app.storage.user.get('email')
+    if user_id is None or not email:
+        app.storage.user.clear()
+        return False
+
+    current_boot_id = app.storage.general.get('server_boot_id')
+    user_boot_id = app.storage.user.get('auth_boot_id')
+    if current_boot_id and user_boot_id != current_boot_id:
+        app.storage.user.clear()
+        return False
+
+    db = get_db()
+    try:
+        user = db.query(Utilisateur).filter(Utilisateur.id == user_id).first()
+        if user is None or user.email != email:
+            app.storage.user.clear()
+            return False
+    finally:
+        db.close()
+
+    return True
+
+
 @ui.page('/')
 def index():
-    """Page d'accueil - redirige vers login ou accueil selon l'état de connexion"""
-    if app.storage.user.get('authenticated', False):
-        ui.navigate.to('/accueil')
-    else:
-        ui.navigate.to('/login')
+    """Page d'accueil - redirige vers login"""
+    ui.navigate.to('/login')
 
 # Routes des pages
 @ui.page('/login')
@@ -119,31 +147,28 @@ def page_reset_password():
 
 @ui.page('/accueil')
 def page_accueil():
-    if not app.storage.user.get('authenticated', False):
+    if not _is_session_authenticated():
         ui.navigate.to('/login')
         return
     accueil.create()
 
 @ui.page('/calendrier')
 def page_calendrier():
-    if not app.storage.user.get('authenticated', False):
+    if not _is_session_authenticated():
         ui.navigate.to('/login')
-        return
-    if app.storage.user.get('role') == 'enseignant':
-        ui.navigate.to('/charge-eleve')
         return
     calendrier.create()
 
 @ui.page('/formulaire')
 def page_formulaire():
-    if not app.storage.user.get('authenticated', False):
+    if not _is_session_authenticated():
         ui.navigate.to('/login')
         return
     formulaire.create()
 
 @ui.page('/profil')
 def page_profil():
-    if not app.storage.user.get('authenticated', False):
+    if not _is_session_authenticated():
         ui.navigate.to('/login')
         return
     
@@ -156,24 +181,24 @@ def page_profil():
 
 @ui.page('/statistiques')
 def page_statistiques():
-    if not app.storage.user.get('authenticated', False):
+    if not _is_session_authenticated():
         ui.navigate.to('/login')
         return
     if app.storage.user.get('role') == 'enseignant':
-        ui.navigate.to('/charge-eleve')
-        return
-    statistiques.create()
+        charge_eleve.create()
+    else:
+        statistiques.create()
 
 
 @ui.page('/charge-eleve')
 def page_charge_eleve():
-    if not app.storage.user.get('authenticated', False):
+    if not _is_session_authenticated():
         ui.navigate.to('/login')
         return
     if app.storage.user.get('role') != 'enseignant':
         ui.navigate.to('/accueil')
         return
-    charge_eleve.create()
+    ui.navigate.to('/statistiques')
 
 # Lancement de l'application
 if __name__ in {"__main__", "__mp_main__"}:

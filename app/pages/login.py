@@ -170,6 +170,7 @@ def create():
                     app.storage.user['user_id'] = user.id
                     app.storage.user['nom'] = user.nom
                     app.storage.user['prenom'] = user.prenom
+                    app.storage.user['auth_boot_id'] = app.storage.general.get('server_boot_id')
                     ui.notify('Connexion réussie!', type='positive')
                     ui.navigate.to('/accueil')
                 else:
