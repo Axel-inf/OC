@@ -10,7 +10,8 @@ load_dotenv(_PROJECT_ROOT / '.env')
 load_dotenv(_APP_ROOT / '.env')
 
 # Configuration base de données
-DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///./app.db')
+_DEFAULT_SQLITE_PATH = (_PROJECT_ROOT / 'app.db').resolve()
+DATABASE_URL = os.getenv('DATABASE_URL', f"sqlite:///{_DEFAULT_SQLITE_PATH.as_posix()}")
 
 # Configuration application
 SECRET_KEY = os.getenv('SECRET_KEY', 'votre-clé-secrète-à-changer')

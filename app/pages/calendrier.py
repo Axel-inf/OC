@@ -7,10 +7,14 @@ from html import escape
 from pathlib import Path
 import re
 from database.calendar_repository import (
+    average_student_time_spent_for_event,
     create_calendar_event,
     list_calendar_events_for_user,
     seed_default_calendar_events_for_user,
 )
+from database.database import get_db
+from database.models import Enseignant, Utilisateur
+from utils.teacher_assignments import split_choice_token
 
 
 DAY_NAMES_FR = {
@@ -185,6 +189,30 @@ def _migrate_legacy_storage_events(user_identifier: str) -> None:
 def create():
     """Crée la page calendrier"""
     user_identifier = _get_user_identifier()
+    user_role = str(app.storage.user.get('role') or '').strip().lower()
+    is_teacher = user_role == 'enseignant'
+    
+    # Load teacher's subjects if teacher
+    teacher_subjects: set[str] = set()
+    if is_teacher:
+        db = get_db()
+        try:
+            user = db.query(Utilisateur).filter(Utilisateur.email == user_identifier).first()
+            if user:
+                enseignant = db.query(Enseignant).filter(Enseignant.utilisateur_id == user.id).first()
+                if enseignant and enseignant.branches:
+                    # Parse branches to extract subject names
+                    for token in enseignant.branches.split(','):
+                        token = token.strip()
+                        if '||' in token:
+                            subject, _ = split_choice_token(token)
+                            teacher_subjects.add(subject.lower())
+                        else:
+                            # Handle legacy format or simple subject names
+                            teacher_subjects.add(token.lower())
+        finally:
+            db.close()
+    
     _migrate_legacy_storage_events(user_identifier)
     seed_default_calendar_events_for_user(user_identifier)
     events = _load_events_from_database(user_identifier)
@@ -459,6 +487,7 @@ def create():
                             )
 
                             with ui.column().classes('homework-list-container'):
+                                average_cache: dict[tuple[str, str, str, str, str, str], str] = {}
                                 for index, event in enumerate(sorted_day_events):
                                     item_id = f"task-{current_date.strftime('%Y%m%d')}-{index}"
                                     event_type = event.get('type', 'devoir')
@@ -489,22 +518,62 @@ def create():
                                     )
                                     in_workload_window = 1 if start_date <= current_date <= (start_date + timedelta(days=workload_window_days - 1)) else 0
 
+                                    if is_teacher:
+                                        average_key = (
+                                            event.get('type', ''),
+                                            event.get('subject', ''),
+                                            event.get('title', ''),
+                                            event.get('description', ''),
+                                            event.get('date_obj', current_date).isoformat(),
+                                            event.get('estimated_time', ''),
+                                        )
+                                        if average_key not in average_cache:
+                                            average_minutes, _ = average_student_time_spent_for_event(
+                                                event_type=average_key[0],
+                                                subject=average_key[1],
+                                                title=average_key[2],
+                                                description=average_key[3],
+                                                date_iso=average_key[4],
+                                                estimated_time=average_key[5],
+                                            )
+                                            average_cache[average_key] = (
+                                                _format_duration(average_minutes)
+                                                if average_minutes is not None
+                                                else 'à déterminer par les élèves'
+                                            )
+
+                                        time_spent_row_html = f'<div class="time-info time-spent-row">Temps passé : {escape(average_cache[average_key])}</div>'
+                                        # Only show delete button if teacher teaches this subject
+                                        event_subject_lower = event.get('subject', '').lower()
+                                        can_delete = event_subject_lower in teacher_subjects
+                                        if can_delete:
+                                            left_actions_html = f'<button type="button" class="task-delete-button" onclick="deleteCalendarItem(\'{item_id}\', {event["id"]})" aria-label="Supprimer"><span class="task-delete-icon material-icons">delete</span></button>'
+                                        else:
+                                            left_actions_html = ''
+                                    else:
+                                        time_spent_row_html = (
+                                            f'<div class="time-info time-spent-row">Temps passé : '
+                                            f'<input type="text" class="time-spent-input" value="{time_spent if time_spent != "0 minute" else "À compléter"}" aria-label="Temps passé" onfocus="clearTimeSpentInput(this)" onblur="updateCalendarTimeSpent({event["id"]}, this)"></div>'
+                                        )
+                                        left_actions_html = (
+                                            f'<input type="checkbox" class="task-check" onchange="markCalendarDone(\'{item_id}\', this)">'
+                                            f'<button type="button" class="task-delete-button" onclick="window.location.href=\'/formulaire/modifier/{event["id"]}\'" aria-label="Modifier"><span class="task-delete-icon material-icons">edit</span></button>'
+                                            f'<button type="button" class="task-delete-button" onclick="deleteCalendarItem(\'{item_id}\', {event["id"]})" aria-label="Supprimer"><span class="task-delete-icon material-icons">delete</span></button>'
+                                        )
+
                                     ui.html(
                                         f'''
                                             <div id="{item_id}" class="{card_class} calendar-task-card" data-estimated-minutes="{estimated_minutes}" data-workload-window="{in_workload_window}">
                                                 <div class="task-card-layout">
                                                     <div class="task-actions-left">
-                                                        <input type="checkbox" class="task-check" onchange="markCalendarDone('{item_id}', this)">
-                                                        <button type="button" class="task-delete-button" onclick="deleteCalendarItem('{item_id}', {event['id']})" aria-label="Supprimer"><span class="task-delete-icon material-icons">delete</span></button>
+                                                        {left_actions_html}
                                                     </div>
                                                     <div class="task-content">
                                                         <div class="task-type-label">{event_type_label}</div>
                                                         <div class="subject">{subject}</div>
                                                         <div class="description">{full_description}</div>
                                                         <div class="time-info">{time_label} : {estimated_time}</div>
-                                                        <div class="time-info time-spent-row">Temps passé :
-                                                            <input type="text" class="time-spent-input" value="{time_spent if time_spent != '0 minute' else 'À compléter'}" aria-label="Temps passé" onfocus="clearTimeSpentInput(this)" onblur="updateCalendarTimeSpent({event['id']}, this)">
-                                                        </div>
+                                                        {time_spent_row_html}
                                                     </div>
                                                 </div>
                                             </div>

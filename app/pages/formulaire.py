@@ -4,7 +4,7 @@ from components.navbar import create_navbar
 import re
 from datetime import date
 import calendar
-from database.calendar_repository import create_calendar_event
+from database.calendar_repository import create_calendar_event, get_calendar_event_for_user, update_calendar_event
 from database.database import get_db
 from database.models import Utilisateur, Enseignant, Eleve
 from utils.school import all_teaching_subjects
@@ -199,7 +199,7 @@ def create_date_picker(label: str, initial_date: date) -> ui.input:
     render_days()
     return date_input
 
-def create():
+def create(edit_event_id: int | None = None):
     """Crée la page de formulaire pour ajouter un devoir ou examen"""
     prefill_date_iso = app.storage.user.get('calendar_prefill_date_iso')
     prefill_date = date.today()
@@ -208,6 +208,34 @@ def create():
             prefill_date = date.fromisoformat(prefill_date_iso)
         except ValueError:
             prefill_date = date.today()
+
+    user_identifier = (
+        app.storage.user.get('email')
+        or str(app.storage.user.get('user_id') or '')
+        or 'anonymous'
+    )
+    edit_event: dict | None = None
+    if edit_event_id is not None:
+        db_event = get_calendar_event_for_user(edit_event_id, user_identifier)
+        if db_event is None:
+            ui.notify('Événement introuvable', type='negative')
+            ui.navigate.to('/calendrier')
+            return
+
+        try:
+            prefill_date = date.fromisoformat(db_event.date_iso)
+        except ValueError:
+            prefill_date = date.today()
+
+        edit_event = {
+            'id': int(db_event.id),
+            'type': db_event.event_type,
+            'subject': db_event.subject,
+            'title': db_event.title or '',
+            'description': db_event.description or '',
+            'date_iso': db_event.date_iso,
+            'estimated_time': db_event.estimated_time,
+        }
     
     ui.add_head_html('''
         <style>
@@ -359,7 +387,7 @@ def create():
             # Sélecteur de type (devoir ou examen)
             type_event = ui.toggle(
                 ['Devoir', 'Examen'],
-                value='Devoir'
+                value=('Examen' if (edit_event and edit_event.get('type') == 'examen') else 'Devoir')
             ).classes('w-full q-mb-lg')
             
             # Conteneur pour les champs du formulaire
@@ -371,7 +399,7 @@ def create():
                 
                 with form_container:
                     # Champs communs
-                    titre = ui.input('Titre').props('outlined').classes('w-full q-mb-md')
+                    titre = ui.input('Titre', value=(edit_event.get('title', '') if edit_event else '')).props('outlined').classes('w-full q-mb-md')
 
                     class_select = None
                     if role == 'enseignant':
@@ -403,13 +431,34 @@ def create():
                     else:
                         branche = ui.select(
                             teaching_subjects,
-                            label='Branche'
+                            label='Branche',
+                            value=(edit_event.get('subject', '') if edit_event else None),
                         ).props('outlined').classes('w-full q-mb-md')
+
+                    if role == 'enseignant' and edit_event is not None and class_select is not None:
+                        subject_name = (edit_event.get('subject', '') or '').strip()
+                        matching_class = None
+                        matching_token = None
+                        for class_name, tokens in teacher_assignments_by_class.items():
+                            for token in tokens:
+                                candidate_subject, _ = split_choice_token(token)
+                                if candidate_subject == subject_name:
+                                    matching_class = class_name
+                                    matching_token = token
+                                    break
+                            if matching_class:
+                                break
+
+                        if matching_class:
+                            class_select.value = matching_class
+                            refresh_teacher_branches()
+                            if matching_token:
+                                branche.value = matching_token
                     
                     description = ui.textarea(
                         'Description',
                         placeholder='Ex: Exercices 1-5, p.42'
-                    ).props('outlined').classes('w-full q-mb-md')
+                    , value=(edit_event.get('description', '') if edit_event else '')).props('outlined').classes('w-full q-mb-md')
                     
                     if type_event.value == 'Devoir':
                         # Champs spécifiques au devoir
@@ -417,7 +466,8 @@ def create():
                         
                         temps_estime = ui.input(
                             'Estimation du temps',
-                            placeholder='Ex: 1h30'
+                            placeholder='Ex: 1h30',
+                            value=(edit_event.get('estimated_time', '') if edit_event and edit_event.get('type') == 'devoir' else ''),
                         ).props('outlined').classes('w-full q-mb-md')
                         
                     else:
@@ -426,7 +476,8 @@ def create():
                         
                         temps_revision = ui.input(
                             'Temps de révision estimé',
-                            placeholder='Ex: 3h'
+                            placeholder='Ex: 3h',
+                            value=(edit_event.get('estimated_time', '') if edit_event and edit_event.get('type') == 'examen' else ''),
                         ).props('outlined').classes('w-full q-mb-md')
                     
                     # Bouton d'enregistrement
@@ -466,8 +517,14 @@ def create():
                         normalized_estimation = format_minutes_for_storage(parsed_estimation_minutes)
 
                         event_type = type_event.value.lower()
+                        is_edit_mode = edit_event is not None
                         if role == 'enseignant':
                             subject_name, _ = split_choice_token(branche_value)
+                            teacher_identifier = (
+                                app.storage.user.get('email')
+                                or str(app.storage.user.get('user_id') or '')
+                                or 'anonymous'
+                            )
                             students = class_to_students.get(selected_class_value, [])
                             if not students:
                                 ui.notify(f'Aucun élève trouvé dans la classe {selected_class_value}', type='warning')
@@ -481,9 +538,25 @@ def create():
                             if not matching_students:
                                 matching_students = students
 
-                            for student in matching_students:
-                                create_calendar_event(
-                                    user_identifier=student['email'],
+                            if is_edit_mode:
+                                updated = update_calendar_event(
+                                    event_id=int(edit_event['id']),
+                                    user_identifier=teacher_identifier,
+                                    event_type=event_type,
+                                    subject=subject_name,
+                                    title=titre_value,
+                                    description=description_value,
+                                    date_iso=parsed_date.isoformat(),
+                                    estimated_time=normalized_estimation,
+                                    propagate_to_linked=True,
+                                )
+                                if not updated:
+                                    ui.notify('Impossible de modifier cet événement', type='negative')
+                                    return
+                                ui.notify('Événement modifié avec succès!', type='positive')
+                            else:
+                                teacher_event_id = create_calendar_event(
+                                    user_identifier=teacher_identifier,
                                     event_type=event_type,
                                     subject=subject_name,
                                     title=titre_value,
@@ -491,31 +564,58 @@ def create():
                                     date_iso=parsed_date.isoformat(),
                                     estimated_time=normalized_estimation,
                                     time_spent='0 minute',
+                                    source_event_id=None,
                                 )
 
-                            ui.notify(f'{type_event.value} ajouté pour {len(matching_students)} élève(s)', type='positive')
-                        else:
-                            user_identifier = (
-                                app.storage.user.get('email')
-                                or str(app.storage.user.get('user_id') or '')
-                                or 'anonymous'
-                            )
-                            create_calendar_event(
-                                user_identifier=user_identifier,
-                                event_type=event_type,
-                                subject=branche_value,
-                                title=titre_value,
-                                description=description_value,
-                                date_iso=parsed_date.isoformat(),
-                                estimated_time=normalized_estimation,
-                                time_spent='0 minute',
-                            )
+                                for student in matching_students:
+                                    create_calendar_event(
+                                        user_identifier=student['email'],
+                                        event_type=event_type,
+                                        subject=subject_name,
+                                        title=titre_value,
+                                        description=description_value,
+                                        date_iso=parsed_date.isoformat(),
+                                        estimated_time=normalized_estimation,
+                                        time_spent='0 minute',
+                                        source_event_id=teacher_event_id,
+                                    )
 
-                            ui.notify(f'{type_event.value} ajouté avec succès!', type='positive')
+                                ui.notify(f'{type_event.value} ajouté pour {len(matching_students)} élève(s)', type='positive')
+                        else:
+                            if is_edit_mode:
+                                updated = update_calendar_event(
+                                    event_id=int(edit_event['id']),
+                                    user_identifier=user_identifier,
+                                    event_type=event_type,
+                                    subject=branche_value,
+                                    title=titre_value,
+                                    description=description_value,
+                                    date_iso=parsed_date.isoformat(),
+                                    estimated_time=normalized_estimation,
+                                    propagate_to_linked=False,
+                                )
+                                if not updated:
+                                    ui.notify('Impossible de modifier cet événement', type='negative')
+                                    return
+                                ui.notify('Événement modifié avec succès!', type='positive')
+                            else:
+                                create_calendar_event(
+                                    user_identifier=user_identifier,
+                                    event_type=event_type,
+                                    subject=branche_value,
+                                    title=titre_value,
+                                    description=description_value,
+                                    date_iso=parsed_date.isoformat(),
+                                    estimated_time=normalized_estimation,
+                                    time_spent='0 minute',
+                                    source_event_id=None,
+                                )
+
+                                ui.notify(f'{type_event.value} ajouté avec succès!', type='positive')
                         ui.navigate.to('/calendrier')
                     
                     ui.button(
-                        'ENREGISTRER',
+                        'MODIFIER' if edit_event else 'ENREGISTRER',
                         icon='check',
                         on_click=handle_submit
                     ).props('color=primary').classes('w-full q-mt-md').style('padding: 12px;')

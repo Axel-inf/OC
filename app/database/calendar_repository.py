@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 import re
 from database.database import get_db
-from database.models import CalendarEvent
+from database.models import CalendarEvent, RoleEnum, Utilisateur
 
 
 def seed_default_calendar_events_for_user(user_identifier: str) -> None:
@@ -104,6 +104,7 @@ def create_calendar_event(
     date_iso: str,
     estimated_time: str,
     time_spent: str = '0 minute',
+    source_event_id: int | None = None,
 ) -> int:
     db = get_db()
     try:
@@ -117,6 +118,7 @@ def create_calendar_event(
             estimated_time=estimated_time,
             time_spent=time_spent,
             is_hidden=False,
+            source_event_id=source_event_id,
         )
         db.add(new_event)
         db.commit()
@@ -141,6 +143,18 @@ def delete_calendar_event(event_id: int, user_identifier: str) -> bool:
             return False
 
         event.is_hidden = True
+        
+        linked_events = (
+            db.query(CalendarEvent)
+            .filter(
+                CalendarEvent.source_event_id == event_id,
+                CalendarEvent.is_hidden.is_(False),
+            )
+            .all()
+        )
+        for linked_event in linked_events:
+            linked_event.is_hidden = True
+        
         db.commit()
         return True
     finally:
@@ -163,6 +177,79 @@ def update_calendar_event_time_spent(event_id: int, user_identifier: str, time_s
 
         event.time_spent = time_spent
         db.commit()
+        return True
+    finally:
+        db.close()
+
+
+def get_calendar_event_for_user(event_id: int, user_identifier: str) -> CalendarEvent | None:
+    db = get_db()
+    try:
+        return (
+            db.query(CalendarEvent)
+            .filter(
+                CalendarEvent.id == event_id,
+                CalendarEvent.user_identifier == user_identifier,
+                CalendarEvent.is_hidden.is_(False),
+            )
+            .first()
+        )
+    finally:
+        db.close()
+
+
+def update_calendar_event(
+    *,
+    event_id: int,
+    user_identifier: str,
+    event_type: str,
+    subject: str,
+    title: str,
+    description: str,
+    date_iso: str,
+    estimated_time: str,
+    propagate_to_linked: bool = True,
+) -> bool:
+    db = get_db()
+    try:
+        event = (
+            db.query(CalendarEvent)
+            .filter(
+                CalendarEvent.id == event_id,
+                CalendarEvent.user_identifier == user_identifier,
+                CalendarEvent.is_hidden.is_(False),
+            )
+            .first()
+        )
+        if event is None:
+            return False
+
+        event.event_type = event_type
+        event.subject = subject
+        event.title = title
+        event.description = description
+        event.date_iso = date_iso
+        event.estimated_time = estimated_time
+        db.commit()
+
+        if propagate_to_linked:
+            linked_events = (
+                db.query(CalendarEvent)
+                .filter(
+                    CalendarEvent.source_event_id == event_id,
+                    CalendarEvent.is_hidden.is_(False),
+                )
+                .all()
+            )
+            for linked_event in linked_events:
+                linked_event.event_type = event_type
+                linked_event.subject = subject
+                linked_event.title = title
+                linked_event.description = description
+                linked_event.date_iso = date_iso
+                linked_event.estimated_time = estimated_time
+            db.commit()
+
         return True
     finally:
         db.close()
@@ -262,6 +349,50 @@ def list_calendar_events_in_range(
             query = query.filter(CalendarEvent.subject == subject)
 
         return query.order_by(CalendarEvent.date_iso.asc(), CalendarEvent.id.asc()).all()
+    finally:
+        db.close()
+
+
+def average_student_time_spent_for_event(
+    *,
+    event_type: str,
+    subject: str,
+    title: str,
+    description: str,
+    date_iso: str,
+    estimated_time: str,
+) -> tuple[int | None, int]:
+    db = get_db()
+    try:
+        matching_events = (
+            db.query(CalendarEvent)
+            .join(Utilisateur, Utilisateur.email == CalendarEvent.user_identifier)
+            .filter(
+                Utilisateur.role == RoleEnum.ELEVE,
+                CalendarEvent.is_hidden.is_(False),
+                CalendarEvent.event_type == event_type,
+                CalendarEvent.subject == subject,
+                CalendarEvent.title == title,
+                CalendarEvent.description == description,
+                CalendarEvent.date_iso == date_iso,
+                CalendarEvent.estimated_time == estimated_time,
+            )
+            .all()
+        )
+
+        completed_minutes: list[int] = []
+        for event in matching_events:
+            if _is_unfinished_event(event.time_spent):
+                continue
+            minutes = _duration_to_minutes(event.time_spent)
+            if minutes > 0:
+                completed_minutes.append(minutes)
+
+        if not completed_minutes:
+            return None, 0
+
+        average_minutes = int(round(sum(completed_minutes) / len(completed_minutes)))
+        return average_minutes, len(completed_minutes)
     finally:
         db.close()
 

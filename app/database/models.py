@@ -126,3 +126,4 @@ class CalendarEvent(Base):
     estimated_time = Column(String(50), nullable=False)
     time_spent = Column(String(50), nullable=False, default='0 minute')
     is_hidden = Column(Boolean, nullable=False, default=False)
+    source_event_id = Column(Integer, ForeignKey('calendar_events.id'), nullable=True, index=True)

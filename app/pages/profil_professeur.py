@@ -112,6 +112,18 @@ def create():
             .profil-card .q-field__control {
                 border-radius: 8px !important;
             }
+            .profil-card .teacher-course-select .q-field__control {
+                height: auto !important;
+                min-height: 56px !important;
+            }
+            .profil-card .teacher-course-select .q-chip {
+                margin: 2px;
+                max-width: 100%;
+            }
+            .profil-card .teacher-course-select .q-field__control-container {
+                padding-top: 8px;
+                padding-bottom: 4px;
+            }
             @media (max-width: 520px) {
                 .profil-container {
                     padding: 12px 12px 92px 12px;
@@ -163,23 +175,103 @@ def create():
                 with class_branches_box:
                     for class_name in ordered_classes:
                         ui.html(f'<div class="section-title">{class_name}</div>', sanitize=False)
-                        options = build_subject_options_for_class(class_name)
-                        initial_tokens = set(class_branch_values.get(class_name, set()))
-                        allowed_values = set(options.keys())
-                        initial_values = [token for token in initial_tokens if token in allowed_values]
-
+                        
+                        # Build options as dict for dropdown display (token -> HTML label)
+                        options_for_dropdown = build_subject_options_for_class(class_name)
+                        
+                        # Convert to simple labels for select values
+                        simple_options = []
+                        token_to_simple_label = {}
+                        for token, html_label in options_for_dropdown.items():
+                            simple_label = token_to_label(token)
+                            simple_options.append(simple_label)
+                            token_to_simple_label[token] = simple_label
+                        
+                        initial_tokens = class_branch_values.get(class_name, set())
+                        initial_simple_labels = [token_to_simple_label.get(token) for token in initial_tokens if token in token_to_simple_label]
+                        
+                        # Display selected branches as comma-separated text
+                        display_text = ', '.join(sorted(initial_simple_labels)) if initial_simple_labels else ''
+                        
+                        # Create a custom container with label on top and content below
+                        with ui.column().classes('w-full q-mb-md').style('gap: 4px;'):
+                            ui.label('Branches enseignées').classes('text-caption text-grey-7')
+                            display_field = ui.element('div').classes('cursor-pointer').style(
+                                'border: 1px solid #ccc; border-radius: 4px; padding: 12px 36px 12px 12px; '
+                                'min-height: 40px; position: relative; background: white; word-wrap: break-word;'
+                            )
+                            with display_field:
+                                display_content = ui.label(display_text).classes('text-body2')
+                                ui.icon('arrow_drop_down').classes('cursor-pointer').style(
+                                    'position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #666;'
+                                )
+                        
+                        # Create a hidden select to maintain the actual values
                         class_select = ui.select(
-                            options,
-                            label=f'Cours donnés en {class_name}',
-                            value=initial_values,
+                            sorted(simple_options),
+                            value=initial_simple_labels if initial_simple_labels else [],
                             multiple=True,
-                        ).props('outlined options-html use-chips').classes('w-full q-mb-md')
+                        ).style('display: none;')
+                        
+                        # Dialog for selection
+                        with ui.dialog() as branch_dialog, ui.card().style('min-width: 400px; max-width: 600px;'):
+                            ui.label(f'{class_name} - Branches enseignées').classes('text-h6 q-mb-md')
+                            
+                            checkboxes_dict = {}
+                            with ui.column().classes('w-full'):
+                                for option_label in sorted(simple_options):
+                                    cb = ui.checkbox(option_label, value=option_label in initial_simple_labels)
+                                    checkboxes_dict[option_label] = cb
+                            
+                            def update_checkboxes(cls=class_name, label_mapping=dict(token_to_simple_label), cbs=checkboxes_dict):
+                                # Get current tokens for this class
+                                current_tokens = class_branch_values.get(cls, set())
+                                current_labels = {label_mapping.get(token) for token in current_tokens if token in label_mapping}
+                                # Update checkbox values
+                                for label, cb in cbs.items():
+                                    cb.value = label in current_labels
+                            
+                        from functools import partial
+                        
+                        # Use partial to bind the variables at creation time
+                        def save_branches(e=None, cls=class_name, disp_content=display_content, sel=class_select, label_map=token_to_simple_label.copy(), cbs=checkboxes_dict, dlg=branch_dialog):
+                            selected_labels = [lbl for lbl, cb in cbs.items() if cb.value]
+                            
+                            # Replace whole string value
+                            disp_content.set_text(', '.join(sorted(selected_labels)))
+                            
+                            # Set actual selection array on hidden multi-select
+                            sel.set_value(selected_labels)
+                            
+                            # Build the matching branch tokens
+                            tokens = set()
+                            for token, label in label_map.items():
+                                if label in selected_labels:
+                                    tokens.add(token)
+                            
+                            # IMPORTANT: Update the core dictionary used for saving to DB
+                            class_branch_values[cls] = list(tokens) if tokens else []
+                            
+                            dlg.close()
+                            
+                        def open_dialog(e=None, update_fn=update_checkboxes, dlg=branch_dialog):
+                            update_fn()
+                            dlg.open()
+                        
+                        with ui.row().classes('w-full justify-end q-mt-lg q-mb-sm'):
+                            ui.button('Valider', on_click=partial(save_branches)).props('color=primary').style('padding: 8px 24px;')
+                        
+                        display_field.on('click', partial(open_dialog))
 
                         class_branch_selects[class_name] = class_select
 
-                        def on_change(event, cls=class_name):
-                            selected_values = event.value or []
-                            tokens = {str(token).strip() for token in selected_values if str(token).strip()}
+                        def on_change(event, cls=class_name, label_mapping=dict(token_to_simple_label)):
+                            selected_labels = event.value or []
+                            # Convert labels back to tokens
+                            tokens = set()
+                            for token, label in label_mapping.items():
+                                if label in selected_labels:
+                                    tokens.add(token)
                             class_branch_values[cls] = tokens
 
                         class_select.on_value_change(on_change)

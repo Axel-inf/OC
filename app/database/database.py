@@ -19,11 +19,12 @@ def _ensure_calendar_event_columns() -> None:
         return
 
     columns = {column['name'] for column in inspector.get_columns('calendar_events')}
-    if 'is_hidden' in columns:
-        return
-
+    
     with engine.begin() as connection:
-        connection.execute(text('ALTER TABLE calendar_events ADD COLUMN is_hidden BOOLEAN NOT NULL DEFAULT 0'))
+        if 'is_hidden' not in columns:
+            connection.execute(text('ALTER TABLE calendar_events ADD COLUMN is_hidden BOOLEAN NOT NULL DEFAULT 0'))
+        if 'source_event_id' not in columns:
+            connection.execute(text('ALTER TABLE calendar_events ADD COLUMN source_event_id INTEGER'))
 
 def get_db() -> Session:
     """Retourne une session de base de données"""

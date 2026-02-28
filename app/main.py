@@ -166,6 +166,19 @@ def page_formulaire():
         return
     formulaire.create()
 
+
+@ui.page('/formulaire/modifier/{event_id}')
+def page_formulaire_modifier(event_id: str):
+    if not _is_session_authenticated():
+        ui.navigate.to('/login')
+        return
+    try:
+        parsed_event_id = int(event_id)
+    except (TypeError, ValueError):
+        ui.navigate.to('/calendrier')
+        return
+    formulaire.create(edit_event_id=parsed_event_id)
+
 @ui.page('/profil')
 def page_profil():
     if not _is_session_authenticated():
