@@ -45,6 +45,7 @@ Créez un fichier `.env` à la racine du projet :
 DATABASE_URL=sqlite:///./app.db
 SECRET_KEY=votre-clé-secrète-très-longue-et-complexe
 DEBUG=True
+SEED_DEMO_DATA_ON_STARTUP=False
 
 # Email (réinitialisation mot de passe)
 SMTP_HOST=smtp.gmail.com
@@ -54,6 +55,8 @@ SMTP_USERNAME=votre.adresse@gmail.com
 SMTP_PASSWORD=votre_mot_de_passe_application_gmail
 SMTP_FROM_EMAIL=votre.adresse@gmail.com
 ```
+
+`SEED_DEMO_DATA_ON_STARTUP=False` garde les données entre redémarrages. Mettez `True` seulement pour réinitialiser et repeupler les données de démonstration au démarrage.
 
 ### Configuration Gmail (obligatoire pour l'envoi d'email)
 

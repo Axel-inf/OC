@@ -1,7 +1,181 @@
 from datetime import date, timedelta
 import re
 from database.database import get_db
-from database.models import CalendarEvent, RoleEnum, Utilisateur
+from database.models import CalendarEvent, RoleEnum, Utilisateur, Enseignant
+from utils.teacher_assignments import parse_teacher_assignments, subject_from_choice_token
+
+
+def _student_has_subject_for_sync(
+    subject: str,
+    *,
+    langue1: str,
+    langue2: str,
+    langue3: str,
+    os_value: str,
+    oc_value: str,
+    basic_english: bool,
+) -> bool:
+    normalized_subject = (subject or '').strip()
+    if not normalized_subject:
+        return False
+
+    if normalized_subject == 'Basic English':
+        return bool(basic_english)
+
+    selected_values = {
+        (langue1 or '').strip(),
+        (langue2 or '').strip(),
+        (langue3 or '').strip(),
+        (os_value or '').strip(),
+        (oc_value or '').strip(),
+    }
+    selected_values = {value for value in selected_values if value}
+
+    if normalized_subject.startswith('OS '):
+        return (os_value or '').strip() == normalized_subject.removeprefix('OS ').strip()
+    if normalized_subject.startswith('OC '):
+        return (oc_value or '').strip() == normalized_subject.removeprefix('OC ').strip()
+
+    if normalized_subject in selected_values:
+        return True
+
+    common_subjects = {
+        'Mathématiques', 'Français', 'Histoire', 'Géographie',
+        'Physique', 'Chimie', 'Biologie', 'Arts visuels', 'Éducation physique', 'Musique',
+    }
+    return normalized_subject in common_subjects
+
+
+def sync_student_calendar_for_class_change(
+    *,
+    user_identifier: str,
+    new_class: str,
+    langue1: str,
+    langue2: str,
+    langue3: str,
+    os_value: str,
+    oc_value: str,
+    basic_english: bool,
+) -> tuple[int, int]:
+    """Synchronise les événements élève quand sa classe change.
+
+    Returns:
+        (hidden_count, created_count)
+    """
+    # Aide IA: synchronisation automatique des événements liés lors d'un changement de classe
+    normalized_class = (new_class or '').strip()
+    if not user_identifier or not normalized_class:
+        return (0, 0)
+
+    db = get_db()
+    try:
+        hidden_count = 0
+        created_count = 0
+
+        # Hide linked events from other classes to prevent stale homework visibility.
+        stale_events = (
+            db.query(CalendarEvent)
+            .filter(
+                CalendarEvent.user_identifier == user_identifier,
+                CalendarEvent.is_hidden.is_(False),
+                CalendarEvent.source_event_id.isnot(None),
+                (CalendarEvent.target_class.is_(None) | (CalendarEvent.target_class != normalized_class)),
+            )
+            .all()
+        )
+        for stale_event in stale_events:
+            stale_event.is_hidden = True
+            hidden_count += 1
+
+        existing_source_ids = {
+            source_id
+            for (source_id,) in (
+                db.query(CalendarEvent.source_event_id)
+                .filter(
+                    CalendarEvent.user_identifier == user_identifier,
+                    CalendarEvent.is_hidden.is_(False),
+                    CalendarEvent.source_event_id.isnot(None),
+                    CalendarEvent.target_class == normalized_class,
+                )
+                .all()
+            )
+            if source_id is not None
+        }
+
+        teacher_events = (
+            db.query(CalendarEvent)
+            .join(Utilisateur, Utilisateur.email == CalendarEvent.user_identifier)
+            .filter(
+                Utilisateur.role == RoleEnum.ENSEIGNANT,
+                CalendarEvent.is_hidden.is_(False),
+                CalendarEvent.source_event_id.is_(None),
+                (CalendarEvent.target_class == normalized_class) | CalendarEvent.target_class.is_(None),
+            )
+            .all()
+        )
+
+        teacher_assignments_cache: dict[int, dict[str, list[str]]] = {}
+
+        def _teacher_teaches_subject_for_class(teacher_user_id: int | None, subject: str) -> bool:
+            if teacher_user_id is None:
+                return False
+            if teacher_user_id not in teacher_assignments_cache:
+                teacher_profile = (
+                    db.query(Enseignant)
+                    .filter(Enseignant.utilisateur_id == teacher_user_id)
+                    .first()
+                )
+                assignments = parse_teacher_assignments(
+                    teacher_profile.branches if teacher_profile else None,
+                    teacher_profile.classes if teacher_profile else None,
+                )
+                teacher_assignments_cache[teacher_user_id] = assignments
+
+            assignments = teacher_assignments_cache.get(teacher_user_id, {})
+            class_tokens = assignments.get(normalized_class, [])
+            class_subjects = {subject_from_choice_token(token) for token in class_tokens}
+            return (subject or '').strip() in class_subjects
+
+        for teacher_event in teacher_events:
+            if teacher_event.id in existing_source_ids:
+                continue
+
+            event_target_class = (teacher_event.target_class or '').strip()
+            if event_target_class and event_target_class != normalized_class:
+                continue
+            if not event_target_class:
+                teacher_user = (
+                    db.query(Utilisateur)
+                    .filter(Utilisateur.email == teacher_event.user_identifier)
+                    .first()
+                )
+                if not _teacher_teaches_subject_for_class(
+                    teacher_user.id if teacher_user else None,
+                    teacher_event.subject,
+                ):
+                    continue
+
+            db.add(CalendarEvent(
+                user_identifier=user_identifier,
+                event_type=teacher_event.event_type,
+                subject=teacher_event.subject,
+                title=teacher_event.title,
+                description=teacher_event.description,
+                date_iso=teacher_event.date_iso,
+                estimated_time=teacher_event.estimated_time,
+                exam_coefficient=teacher_event.exam_coefficient,
+                exam_duration=teacher_event.exam_duration,
+                time_spent='0 minute',
+                target_class=normalized_class,
+                is_hidden=False,
+                source_event_id=teacher_event.id,
+            ))
+            created_count += 1
+
+        db.commit()
+        return (hidden_count, created_count)
+    finally:
+        db.close()
 
 
 def seed_default_calendar_events_for_user(user_identifier: str) -> None:
@@ -103,9 +277,13 @@ def create_calendar_event(
     description: str,
     date_iso: str,
     estimated_time: str,
+    exam_coefficient: float | None = None,
+    exam_duration: str | None = None,
     time_spent: str = '0 minute',
     source_event_id: int | None = None,
+    target_class: str | None = None,
 ) -> int:
+    # Aide IA: extension des événements calendrier avec classe cible + métadonnées d'examen
     db = get_db()
     try:
         new_event = CalendarEvent(
@@ -116,7 +294,10 @@ def create_calendar_event(
             description=description,
             date_iso=date_iso,
             estimated_time=estimated_time,
+            exam_coefficient=exam_coefficient,
+            exam_duration=(exam_duration or '').strip() or None,
             time_spent=time_spent,
+            target_class=(target_class or '').strip() or None,
             is_hidden=False,
             source_event_id=source_event_id,
         )
@@ -208,8 +389,12 @@ def update_calendar_event(
     description: str,
     date_iso: str,
     estimated_time: str,
+    exam_coefficient: float | None = None,
+    exam_duration: str | None = None,
+    target_class: str | None = None,
     propagate_to_linked: bool = True,
 ) -> bool:
+    # Aide IA: propagation des modifications vers événements liés (élèves)
     db = get_db()
     try:
         event = (
@@ -230,6 +415,9 @@ def update_calendar_event(
         event.description = description
         event.date_iso = date_iso
         event.estimated_time = estimated_time
+        event.exam_coefficient = exam_coefficient
+        event.exam_duration = (exam_duration or '').strip() or None
+        event.target_class = (target_class or '').strip() or None
         db.commit()
 
         if propagate_to_linked:
@@ -248,6 +436,9 @@ def update_calendar_event(
                 linked_event.description = description
                 linked_event.date_iso = date_iso
                 linked_event.estimated_time = estimated_time
+                linked_event.exam_coefficient = exam_coefficient
+                linked_event.exam_duration = (exam_duration or '').strip() or None
+                linked_event.target_class = (target_class or '').strip() or None
             db.commit()
 
         return True
@@ -361,6 +552,7 @@ def average_student_time_spent_for_event(
     description: str,
     date_iso: str,
     estimated_time: str,
+    target_class: str | None = None,
 ) -> tuple[int | None, int]:
     db = get_db()
     try:
@@ -377,8 +569,13 @@ def average_student_time_spent_for_event(
                 CalendarEvent.date_iso == date_iso,
                 CalendarEvent.estimated_time == estimated_time,
             )
-            .all()
         )
+
+        normalized_target_class = (target_class or '').strip()
+        if normalized_target_class:
+            matching_events = matching_events.filter(CalendarEvent.target_class == normalized_target_class)
+
+        matching_events = matching_events.all()
 
         completed_minutes: list[int] = []
         for event in matching_events:

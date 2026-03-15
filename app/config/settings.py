@@ -17,6 +17,7 @@ DATABASE_URL = os.getenv('DATABASE_URL', f"sqlite:///{_DEFAULT_SQLITE_PATH.as_po
 SECRET_KEY = os.getenv('SECRET_KEY', 'votre-clé-secrète-à-changer')
 APP_NAME = "Planification Devoirs - Collège du Sud"
 DEBUG = os.getenv('DEBUG', 'True') == 'True'
+SEED_DEMO_DATA_ON_STARTUP = os.getenv('SEED_DEMO_DATA_ON_STARTUP', 'False') == 'True'
 
 # Configuration authentification
 SESSION_TIMEOUT = 3600  # 1 heure en secondes

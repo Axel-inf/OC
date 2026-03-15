@@ -1,6 +1,7 @@
 from sqlalchemy import Column, Integer, String, Float, Date, Boolean, ForeignKey, Enum, Text
 from sqlalchemy.orm import relationship, declarative_base
 import enum
+from datetime import date
 
 Base = declarative_base()
 
@@ -40,6 +41,20 @@ class Eleve(Base):
     # Relations
     utilisateur = relationship("Utilisateur", back_populates="eleve")
     temps_reels = relationship("TempsReel", back_populates="eleve")
+    changements_classe = relationship("EleveChangementClasse", back_populates="eleve")
+
+
+class EleveChangementClasse(Base):
+    # Aide IA: historisation des changements de classe d'un élève
+    __tablename__ = 'eleve_changements_classe'
+
+    id = Column(Integer, primary_key=True)
+    eleve_id = Column(Integer, ForeignKey('eleves.id'), nullable=False, index=True)
+    ancienne_classe = Column(String(50), nullable=False)
+    nouvelle_classe = Column(String(50), nullable=False)
+    changed_on = Column(Date, nullable=False, default=date.today)
+
+    eleve = relationship("Eleve", back_populates="changements_classe")
 
 class Enseignant(Base):
     __tablename__ = 'enseignants'
@@ -124,6 +139,10 @@ class CalendarEvent(Base):
     description = Column(Text, default='')
     date_iso = Column(String(10), nullable=False)
     estimated_time = Column(String(50), nullable=False)
+    # Aide IA: métadonnées d'examen pour affichage élève/prof
+    exam_coefficient = Column(Float, nullable=True)
+    exam_duration = Column(String(50), nullable=True)
     time_spent = Column(String(50), nullable=False, default='0 minute')
+    target_class = Column(String(50), nullable=True)
     is_hidden = Column(Boolean, nullable=False, default=False)
     source_event_id = Column(Integer, ForeignKey('calendar_events.id'), nullable=True, index=True)

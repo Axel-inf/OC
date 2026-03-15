@@ -13,6 +13,7 @@ def init_database():
 
 
 def _ensure_calendar_event_columns() -> None:
+    # Aide IA: migrations légères pour colonnes ajoutées sans outil externe de migration
     inspector = inspect(engine)
     table_names = inspector.get_table_names()
     if 'calendar_events' not in table_names:
@@ -25,6 +26,12 @@ def _ensure_calendar_event_columns() -> None:
             connection.execute(text('ALTER TABLE calendar_events ADD COLUMN is_hidden BOOLEAN NOT NULL DEFAULT 0'))
         if 'source_event_id' not in columns:
             connection.execute(text('ALTER TABLE calendar_events ADD COLUMN source_event_id INTEGER'))
+        if 'target_class' not in columns:
+            connection.execute(text('ALTER TABLE calendar_events ADD COLUMN target_class VARCHAR(50)'))
+        if 'exam_coefficient' not in columns:
+            connection.execute(text('ALTER TABLE calendar_events ADD COLUMN exam_coefficient FLOAT'))
+        if 'exam_duration' not in columns:
+            connection.execute(text('ALTER TABLE calendar_events ADD COLUMN exam_duration VARCHAR(50)'))
 
 def get_db() -> Session:
     """Retourne une session de base de données"""

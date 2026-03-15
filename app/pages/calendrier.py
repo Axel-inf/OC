@@ -130,6 +130,7 @@ def _get_user_identifier() -> str:
 
 
 def _load_events_from_database(user_identifier: str) -> list[dict]:
+    # Aide IA: normalisation des événements avec champs supplémentaires (classe, examen, lien source)
     db_events = list_calendar_events_for_user(user_identifier)
     normalized_events: list[dict] = []
 
@@ -146,7 +147,11 @@ def _load_events_from_database(user_identifier: str) -> list[dict]:
             'title': event.title or '',
             'description': event.description or '',
             'estimated_time': event.estimated_time,
+            'exam_coefficient': event.exam_coefficient,
+            'exam_duration': event.exam_duration or '',
             'time_spent': event.time_spent or '0 minute',
+            'source_event_id': event.source_event_id,
+            'target_class': event.target_class or '',
             'date_obj': date_obj,
         })
 
@@ -317,7 +322,7 @@ def create():
             }
 
             window.updateCalendarTimeSpent = async function(eventId, inputElement) {
-                const userIdentifier = document.body.dataset.calendarUserIdentifier || '';
+                // Aide IA: appel API sans identifiant utilisateur côté client
                 const enteredValue = (inputElement.value || '').trim();
                 const valueToSave = enteredValue.length > 0 ? enteredValue : '0 minute';
 
@@ -327,7 +332,6 @@ def create():
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
                             event_id: eventId,
-                            user_identifier: userIdentifier,
                             time_spent: valueToSave,
                         }),
                     });
@@ -341,20 +345,19 @@ def create():
             }
 
             window.deleteCalendarItem = async function(id, eventId) {
+                // Aide IA: suppression pilotée serveur avec contrôle d'autorisation
                 const card = document.getElementById(id);
                 if (!card) return;
 
                 const removedMinutes = parseInt(card.dataset.estimatedMinutes || '0', 10);
                 const inWorkloadWindow = card.dataset.workloadWindow === '1';
 
-                const userIdentifier = document.body.dataset.calendarUserIdentifier || '';
                 try {
                     const response = await fetch('/api/calendar-events/delete', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
                             event_id: eventId,
-                            user_identifier: userIdentifier,
                         }),
                     });
 
@@ -487,7 +490,7 @@ def create():
                             )
 
                             with ui.column().classes('homework-list-container'):
-                                average_cache: dict[tuple[str, str, str, str, str, str], str] = {}
+                                average_cache: dict[tuple[str, str, str, str, str, str, str], str] = {}
                                 for index, event in enumerate(sorted_day_events):
                                     item_id = f"task-{current_date.strftime('%Y%m%d')}-{index}"
                                     event_type = event.get('type', 'devoir')
@@ -511,14 +514,14 @@ def create():
 
                                     estimated_time = escape(event.get('estimated_time', 'Non renseigné'))
                                     time_spent = escape(event.get('time_spent', '0 minute'))
-                                    time_label = (
-                                        'Temps de révision estimé'
-                                        if event_type == 'examen'
-                                        else 'Temps estimé'
-                                    )
+                                    time_label = 'Temps de révision estimé'
                                     in_workload_window = 1 if start_date <= current_date <= (start_date + timedelta(days=workload_window_days - 1)) else 0
+                                    class_info_html = ''
+                                    branch_info_html = ''
+                                    exam_info_html = ''
 
                                     if is_teacher:
+                                        # Aide IA: affichage prof (classe, branche, moyenne élève, méta examen)
                                         average_key = (
                                             event.get('type', ''),
                                             event.get('subject', ''),
@@ -526,6 +529,7 @@ def create():
                                             event.get('description', ''),
                                             event.get('date_obj', current_date).isoformat(),
                                             event.get('estimated_time', ''),
+                                            event.get('target_class', ''),
                                         )
                                         if average_key not in average_cache:
                                             average_minutes, _ = average_student_time_spent_for_event(
@@ -535,31 +539,65 @@ def create():
                                                 description=average_key[3],
                                                 date_iso=average_key[4],
                                                 estimated_time=average_key[5],
+                                                target_class=average_key[6],
                                             )
                                             average_cache[average_key] = (
                                                 _format_duration(average_minutes)
                                                 if average_minutes is not None
-                                                else 'à déterminer par les élèves'
+                                                else ''
                                             )
 
-                                        time_spent_row_html = f'<div class="time-info time-spent-row">Temps passé : {escape(average_cache[average_key])}</div>'
-                                        # Only show delete button if teacher teaches this subject
+                                        target_class_value = escape((event.get('target_class', '') or '').strip())
+                                        class_info_html = f'<div class="time-info">Classe concernée : {target_class_value or "Non renseignée"}</div>'
+                                        branch_info_html = f'<div class="time-info">Branche : {subject}</div>'
+                                        if event_type == 'examen':
+                                            exam_coeff = event.get('exam_coefficient')
+                                            exam_duration = escape((event.get('exam_duration', '') or '').strip())
+                                            exam_meta_parts: list[str] = []
+                                            if exam_coeff is not None:
+                                                exam_meta_parts.append(f'Coefficient {exam_coeff:g}')
+                                            if exam_duration:
+                                                exam_meta_parts.append(f'Durée {exam_duration}')
+                                            if exam_meta_parts:
+                                                exam_info_html = f'<div class="time-info">{" • ".join(exam_meta_parts)}</div>'
+                                        time_spent_row_html = f'<div class="time-info time-spent-row">Temps moyen par élève : {escape(average_cache[average_key])}</div>'
+                                        # Only show management actions if teacher teaches this subject
                                         event_subject_lower = event.get('subject', '').lower()
                                         can_delete = event_subject_lower in teacher_subjects
                                         if can_delete:
-                                            left_actions_html = f'<button type="button" class="task-delete-button" onclick="deleteCalendarItem(\'{item_id}\', {event["id"]})" aria-label="Supprimer"><span class="task-delete-icon material-icons">delete</span></button>'
+                                            left_actions_html = (
+                                                f'<button type="button" class="task-delete-button" onclick="window.location.href=\'/formulaire/modifier/{event["id"]}\'" aria-label="Modifier"><span class="task-delete-icon material-icons">edit</span></button>'
+                                                f'<button type="button" class="task-delete-button" onclick="deleteCalendarItem(\'{item_id}\', {event["id"]})" aria-label="Supprimer"><span class="task-delete-icon material-icons">delete</span></button>'
+                                            )
                                         else:
                                             left_actions_html = ''
                                     else:
+                                        # Aide IA: protections UI élève pour devoirs partagés (pas de suppression/modification)
+                                        is_shared_event = event.get('source_event_id') is not None
+                                        if event_type == 'examen':
+                                            exam_coeff = event.get('exam_coefficient')
+                                            exam_duration = escape((event.get('exam_duration', '') or '').strip())
+                                            exam_meta_parts: list[str] = []
+                                            if exam_coeff is not None:
+                                                exam_meta_parts.append(f'Coefficient {exam_coeff:g}')
+                                            if exam_duration:
+                                                exam_meta_parts.append(f'Durée {exam_duration}')
+                                            if exam_meta_parts:
+                                                exam_info_html = f'<div class="time-info">{" • ".join(exam_meta_parts)}</div>'
                                         time_spent_row_html = (
                                             f'<div class="time-info time-spent-row">Temps passé : '
                                             f'<input type="text" class="time-spent-input" value="{time_spent if time_spent != "0 minute" else "À compléter"}" aria-label="Temps passé" onfocus="clearTimeSpentInput(this)" onblur="updateCalendarTimeSpent({event["id"]}, this)"></div>'
                                         )
-                                        left_actions_html = (
-                                            f'<input type="checkbox" class="task-check" onchange="markCalendarDone(\'{item_id}\', this)">'
-                                            f'<button type="button" class="task-delete-button" onclick="window.location.href=\'/formulaire/modifier/{event["id"]}\'" aria-label="Modifier"><span class="task-delete-icon material-icons">edit</span></button>'
-                                            f'<button type="button" class="task-delete-button" onclick="deleteCalendarItem(\'{item_id}\', {event["id"]})" aria-label="Supprimer"><span class="task-delete-icon material-icons">delete</span></button>'
-                                        )
+                                        if is_shared_event:
+                                            left_actions_html = (
+                                                f'<input type="checkbox" class="task-check" onchange="markCalendarDone(\'{item_id}\', this)">' 
+                                            )
+                                        else:
+                                            left_actions_html = (
+                                                f'<input type="checkbox" class="task-check" onchange="markCalendarDone(\'{item_id}\', this)">' 
+                                                f'<button type="button" class="task-delete-button" onclick="window.location.href=\'/formulaire/modifier/{event["id"]}\'" aria-label="Modifier"><span class="task-delete-icon material-icons">edit</span></button>'
+                                                f'<button type="button" class="task-delete-button" onclick="deleteCalendarItem(\'{item_id}\', {event["id"]})" aria-label="Supprimer"><span class="task-delete-icon material-icons">delete</span></button>'
+                                            )
 
                                     ui.html(
                                         f'''
@@ -572,6 +610,9 @@ def create():
                                                         <div class="task-type-label">{event_type_label}</div>
                                                         <div class="subject">{subject}</div>
                                                         <div class="description">{full_description}</div>
+                                                        {class_info_html}
+                                                        {branch_info_html}
+                                                        {exam_info_html}
                                                         <div class="time-info">{time_label} : {estimated_time}</div>
                                                         {time_spent_row_html}
                                                     </div>

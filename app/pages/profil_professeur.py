@@ -3,11 +3,11 @@ from nicegui import ui, app
 from components.navbar import create_navbar
 from database.database import get_db
 from database.models import Utilisateur, Enseignant
-from utils.school import all_school_classes
-from utils.auth import hash_password
+from utils.school import all_school_classes, os_subjects, oc_subjects
 from utils.teacher_assignments import (
     build_subject_options_for_class,
     is_bilingual_choice_token,
+    make_choice_token,
     parse_teacher_assignments,
     serialize_teacher_assignments,
     subject_from_choice_token,
@@ -20,12 +20,25 @@ def create():
     user_id = app.storage.user.get('user_id')
 
     ui.add_head_html('<link rel="stylesheet" href="/static/css/custom.css">')
+    ui.add_head_html('''
+        <script>
+            window.__profileDirty = false;
+            window.addEventListener('beforeunload', function (event) {
+                if (window.__profileDirty) {
+                    event.preventDefault();
+                    event.returnValue = '';
+                }
+            });
+        </script>
+    ''')
 
     nom_value = app.storage.user.get('nom', '')
     prenom_value = app.storage.user.get('prenom', '')
     email_value = app.storage.user.get('email', '')
     classes_values: list[str] = []
     class_branch_values: dict[str, set[str]] = {}
+    class_os_values: dict[str, set[str]] = {}
+    class_oc_values: dict[str, set[str]] = {}
 
     if user_id is not None:
         db = get_db()
@@ -40,15 +53,36 @@ def create():
             if enseignant is not None:
                 parsed_assignments = parse_teacher_assignments(enseignant.branches, enseignant.classes)
                 classes_values = sorted(parsed_assignments.keys())
-                class_branch_values = {
-                    class_name: set(tokens)
-                    for class_name, tokens in parsed_assignments.items()
-                }
+                for class_name, tokens in parsed_assignments.items():
+                    branch_tokens: set[str] = set()
+                    os_tokens: set[str] = set()
+                    oc_tokens: set[str] = set()
+                    for token in tokens:
+                        subject_name = subject_from_choice_token(token)
+                        if subject_name.startswith('OS '):
+                            os_tokens.add(token)
+                        elif subject_name.startswith('OC '):
+                            oc_tokens.add(token)
+                        else:
+                            branch_tokens.add(token)
+                    class_branch_values[class_name] = branch_tokens
+                    class_os_values[class_name] = os_tokens
+                    class_oc_values[class_name] = oc_tokens
         finally:
             db.close()
 
     class_catalog = all_school_classes()
     selected_classes = set(classes_values)
+
+    app.storage.user['profile_dirty'] = False
+
+    def mark_profile_dirty() -> None:
+        app.storage.user['profile_dirty'] = True
+        ui.run_javascript('window.__profileDirty = true;')
+
+    def mark_profile_clean() -> None:
+        app.storage.user['profile_dirty'] = False
+        ui.run_javascript('window.__profileDirty = false;')
     
     ui.add_head_html('''
         <style>
@@ -148,7 +182,9 @@ def create():
             nom_input = ui.input('Nom', value=nom_value).props('outlined').classes('w-full q-mb-md')
             prenom_input = ui.input('Prénom', value=prenom_value).props('outlined').classes('w-full q-mb-md')
             email_input = ui.input('Email', value=email_value).props('outlined readonly').classes('w-full q-mb-md')
-            password_input = ui.input('Mot de passe', password=True, password_toggle_button=True).props('outlined').classes('w-full q-mb-md')
+            with ui.row().classes('w-full q-mb-md items-center justify-between').style('padding: 0 8px;'):
+                ui.label('Mot de passe').classes('text-body2')
+                ui.link('Réinitialiser le mot de passe', '/reinitialisation-mot-de-passe').classes('text-primary')
             
             # Section École
             ui.html('<div class="section-title">École</div>', sanitize=False)
@@ -166,6 +202,12 @@ def create():
                 for class_name in list(class_branch_values.keys()):
                     if class_name not in ordered_classes:
                         class_branch_values.pop(class_name, None)
+                for class_name in list(class_os_values.keys()):
+                    if class_name not in ordered_classes:
+                        class_os_values.pop(class_name, None)
+                for class_name in list(class_oc_values.keys()):
+                    if class_name not in ordered_classes:
+                        class_oc_values.pop(class_name, None)
 
                 if not ordered_classes:
                     with class_branches_box:
@@ -175,106 +217,103 @@ def create():
                 with class_branches_box:
                     for class_name in ordered_classes:
                         ui.html(f'<div class="section-title">{class_name}</div>', sanitize=False)
-                        
-                        # Build options as dict for dropdown display (token -> HTML label)
                         options_for_dropdown = build_subject_options_for_class(class_name)
-                        
-                        # Convert to simple labels for select values
-                        simple_options = []
-                        token_to_simple_label = {}
-                        for token, html_label in options_for_dropdown.items():
-                            simple_label = token_to_label(token)
-                            simple_options.append(simple_label)
-                            token_to_simple_label[token] = simple_label
-                        
-                        initial_tokens = class_branch_values.get(class_name, set())
-                        initial_simple_labels = [token_to_simple_label.get(token) for token in initial_tokens if token in token_to_simple_label]
-                        
-                        # Display selected branches as comma-separated text
-                        display_text = ', '.join(sorted(initial_simple_labels)) if initial_simple_labels else ''
-                        
-                        # Create a custom container with label on top and content below
-                        with ui.column().classes('w-full q-mb-md').style('gap: 4px;'):
-                            ui.label('Branches enseignées').classes('text-caption text-grey-7')
-                            display_field = ui.element('div').classes('cursor-pointer').style(
-                                'border: 1px solid #ccc; border-radius: 4px; padding: 12px 36px 12px 12px; '
-                                'min-height: 40px; position: relative; background: white; word-wrap: break-word;'
-                            )
-                            with display_field:
-                                display_content = ui.label(display_text).classes('text-body2')
-                                ui.icon('arrow_drop_down').classes('cursor-pointer').style(
-                                    'position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #666;'
+                        branch_options: dict[str, str] = {}
+                        # OS/OC must always be available, regardless of selected class.
+                        os_options: dict[str, str] = {
+                            make_choice_token(subject, 'standard'): subject
+                            for subject in sorted(os_subjects())
+                        }
+                        oc_options: dict[str, str] = {
+                            make_choice_token(subject, 'standard'): subject
+                            for subject in sorted(oc_subjects())
+                        }
+
+                        for token in sorted(options_for_dropdown.keys()):
+                            label = token_to_label(token)
+                            if label.startswith('OS '):
+                                os_options[token] = label
+                            elif label.startswith('OC '):
+                                oc_options[token] = label
+                            else:
+                                branch_options[token] = label
+
+                        def render_selector_block(
+                            field_label: str,
+                            dialog_title: str,
+                            option_map: dict[str, str],
+                            values_store: dict[str, set[str]],
+                        ) -> None:
+                            current_tokens = set(values_store.get(class_name, set()))
+                            selected_labels = [option_map[token] for token in current_tokens if token in option_map]
+                            display_text = ', '.join(sorted(selected_labels)) if selected_labels else 'Aucune sélection'
+
+                            with ui.column().classes('w-full q-mb-md').style('gap: 4px;'):
+                                ui.label(field_label).classes('text-caption text-grey-7')
+                                display_field = ui.element('div').classes('cursor-pointer').style(
+                                    'border: 1px solid #ccc; border-radius: 4px; padding: 12px 36px 12px 12px; '
+                                    'min-height: 40px; position: relative; background: white; word-wrap: break-word;'
                                 )
-                        
-                        # Create a hidden select to maintain the actual values
-                        class_select = ui.select(
-                            sorted(simple_options),
-                            value=initial_simple_labels if initial_simple_labels else [],
-                            multiple=True,
-                        ).style('display: none;')
-                        
-                        # Dialog for selection
-                        with ui.dialog() as branch_dialog, ui.card().style('min-width: 400px; max-width: 600px;'):
-                            ui.label(f'{class_name} - Branches enseignées').classes('text-h6 q-mb-md')
-                            
-                            checkboxes_dict = {}
-                            with ui.column().classes('w-full'):
-                                for option_label in sorted(simple_options):
-                                    cb = ui.checkbox(option_label, value=option_label in initial_simple_labels)
-                                    checkboxes_dict[option_label] = cb
-                            
-                            def update_checkboxes(cls=class_name, label_mapping=dict(token_to_simple_label), cbs=checkboxes_dict):
-                                # Get current tokens for this class
-                                current_tokens = class_branch_values.get(cls, set())
-                                current_labels = {label_mapping.get(token) for token in current_tokens if token in label_mapping}
-                                # Update checkbox values
-                                for label, cb in cbs.items():
-                                    cb.value = label in current_labels
-                            
-                        from functools import partial
-                        
-                        # Use partial to bind the variables at creation time
-                        def save_branches(e=None, cls=class_name, disp_content=display_content, sel=class_select, label_map=token_to_simple_label.copy(), cbs=checkboxes_dict, dlg=branch_dialog):
-                            selected_labels = [lbl for lbl, cb in cbs.items() if cb.value]
-                            
-                            # Replace whole string value
-                            disp_content.set_text(', '.join(sorted(selected_labels)))
-                            
-                            # Set actual selection array on hidden multi-select
-                            sel.set_value(selected_labels)
-                            
-                            # Build the matching branch tokens
-                            tokens = set()
-                            for token, label in label_map.items():
-                                if label in selected_labels:
-                                    tokens.add(token)
-                            
-                            # IMPORTANT: Update the core dictionary used for saving to DB
-                            class_branch_values[cls] = list(tokens) if tokens else []
-                            
-                            dlg.close()
-                            
-                        def open_dialog(e=None, update_fn=update_checkboxes, dlg=branch_dialog):
-                            update_fn()
-                            dlg.open()
-                        
-                        with ui.row().classes('w-full justify-end q-mt-lg q-mb-sm'):
-                            ui.button('Valider', on_click=partial(save_branches)).props('color=primary').style('padding: 8px 24px;')
-                        
-                        display_field.on('click', partial(open_dialog))
+                                with display_field:
+                                    display_content = ui.label(display_text).classes('text-body2')
+                                    ui.icon('arrow_drop_down').classes('cursor-pointer').style(
+                                        'position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #666;'
+                                    )
 
-                        class_branch_selects[class_name] = class_select
+                            sorted_items = sorted(option_map.items(), key=lambda item: item[1])
 
-                        def on_change(event, cls=class_name, label_mapping=dict(token_to_simple_label)):
-                            selected_labels = event.value or []
-                            # Convert labels back to tokens
-                            tokens = set()
-                            for token, label in label_mapping.items():
-                                if label in selected_labels:
-                                    tokens.add(token)
-                            class_branch_values[cls] = tokens
+                            with ui.dialog().props('persistent') as selector_dialog:
+                                with ui.card().style('min-width: 400px; max-width: 600px;'):
+                                    ui.label(f'{class_name} - {dialog_title}').classes('text-h6 q-mb-md')
 
-                        class_select.on_value_change(on_change)
+                                    with ui.row().classes('w-full justify-end q-mb-sm'):
+                                        ui.button('Annuler', on_click=selector_dialog.close).props('flat')
+                                        save_button = ui.button('Valider').props('color=primary')
+
+                                    checkboxes_dict: dict[str, any] = {}
+                                    with ui.column().classes('w-full'):
+                                        for token, label in sorted_items:
+                                            cb = ui.checkbox(label, value=token in current_tokens)
+                                            checkboxes_dict[token] = cb
+
+                                def update_checkboxes() -> None:
+                                    latest_tokens = set(values_store.get(class_name, set()))
+                                    for token, cb in checkboxes_dict.items():
+                                        cb.value = token in latest_tokens
+
+                            def save_selection() -> None:
+                                selected_tokens = {token for token, cb in checkboxes_dict.items() if cb.value}
+                                values_store[class_name] = selected_tokens
+                                selected_display = [option_map[token] for token in selected_tokens if token in option_map]
+                                display_content.set_text(', '.join(sorted(selected_display)) if selected_display else 'Aucune sélection')
+                                mark_profile_dirty()
+                                selector_dialog.close()
+
+                            def open_dialog() -> None:
+                                update_checkboxes()
+                                selector_dialog.open()
+
+                            save_button.on_click(save_selection)
+                            display_field.on('click', lambda _e: open_dialog())
+
+                        render_selector_block(
+                            field_label='Branches enseignées',
+                            dialog_title='Branches enseignées',
+                            option_map=branch_options,
+                            values_store=class_branch_values,
+                        )
+                        render_selector_block(
+                            field_label='OS enseignées',
+                            dialog_title='OS enseignées',
+                            option_map=os_options,
+                            values_store=class_os_values,
+                        )
+                        render_selector_block(
+                            field_label='OC enseignées',
+                            dialog_title='OC enseignées',
+                            option_map=oc_options,
+                            values_store=class_oc_values,
+                        )
 
             def render_classes(filter_value: str = '') -> None:
                 classes_box.clear()
@@ -295,11 +334,16 @@ def create():
                             else:
                                 selected_classes.discard(cls)
                                 class_branch_values.pop(cls, None)
+                                class_os_values.pop(cls, None)
+                                class_oc_values.pop(cls, None)
+                            mark_profile_dirty()
                             render_class_branch_sections()
 
                         checkbox.on_value_change(on_change)
 
             classes_search.on_value_change(lambda event: render_classes(event.value or ''))
+            nom_input.on_value_change(lambda _e: mark_profile_dirty())
+            prenom_input.on_value_change(lambda _e: mark_profile_dirty())
             render_classes()
             render_class_branch_sections()
             
@@ -320,9 +364,13 @@ def create():
 
                         assignments_by_class: dict[str, list[str]] = {}
                         for class_name in sorted(selected_classes):
-                            values = sorted(set(class_branch_values.get(class_name, set())))
+                            values = sorted(
+                                set(class_branch_values.get(class_name, set()))
+                                | set(class_os_values.get(class_name, set()))
+                                | set(class_oc_values.get(class_name, set()))
+                            )
                             if not values:
-                                ui.notify(f'Sélectionnez au moins une branche pour la classe {class_name}', type='negative')
+                                ui.notify(f'Sélectionnez au moins une branche/OS/OC pour la classe {class_name}', type='negative')
                                 return
                             assignments_by_class[class_name] = values
 
@@ -332,23 +380,29 @@ def create():
 
                         user.nom = (nom_input.value or '').strip() or user.nom
                         user.prenom = (prenom_input.value or '').strip() or user.prenom
-                        new_password = (password_input.value or '').strip()
-                        if new_password:
-                            if len(new_password) < 8:
-                                ui.notify('Le mot de passe doit contenir au minimum 8 caractères', type='negative')
-                                return
-                            user.mot_de_passe = hash_password(new_password)
-
                         enseignant.classes = ','.join(sorted(selected_classes))
                         enseignant.branches = serialize_teacher_assignments(assignments_by_class)
-                        enseignant.os = ''
-                        enseignant.oc = ''
+                        selected_os_subjects = sorted({
+                            subject_from_choice_token(token).removeprefix('OS ').strip()
+                            for values in class_os_values.values()
+                            for token in values
+                            if subject_from_choice_token(token).startswith('OS ')
+                        })
+                        selected_oc_subjects = sorted({
+                            subject_from_choice_token(token).removeprefix('OC ').strip()
+                            for values in class_oc_values.values()
+                            for token in values
+                            if subject_from_choice_token(token).startswith('OC ')
+                        })
+                        enseignant.os = ','.join(selected_os_subjects)
+                        enseignant.oc = ','.join(selected_oc_subjects)
                         enseignant.basic_english = has_basic_english
                         enseignant.bilingue = has_bilingual_course
 
                         db.commit()
                         app.storage.user['nom'] = user.nom
                         app.storage.user['prenom'] = user.prenom
+                        mark_profile_clean()
                         ui.notify('Profil mis à jour avec succès!', type='positive')
                     except Exception:
                         db.rollback()
@@ -357,15 +411,25 @@ def create():
                         db.close()
                 
                 async def handle_logout():
+                    if app.storage.user.get('profile_dirty', False):
+                        ui.notify('Veuillez enregistrer vos modifications', type='warning', timeout=3)
+                        ui.run_javascript(
+                            '''
+                            const saveBtn = document.getElementById('profile-save-button');
+                            if (saveBtn) saveBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            '''
+                        )
+                        return
                     app.storage.user.clear()
                     ui.notify('Déconnexion réussie', type='info')
                     ui.navigate.to('/login')
                 
-                ui.button(
+                save_button = ui.button(
                     'ENREGISTRER',
                     icon='save',
                     on_click=handle_save
                 ).props('color=primary').classes('flex-1')
+                save_button.props('id=profile-save-button')
                 
                 ui.button(
                     'SE DÉCONNECTER',

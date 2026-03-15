@@ -10,7 +10,7 @@ from database.calendar_repository import (
     list_calendar_events_in_range,
 )
 from database.database import get_db
-from database.models import Utilisateur, Eleve, Enseignant
+from database.models import Utilisateur, Eleve, Enseignant, CalendarEvent, RoleEnum
 from utils.teacher_assignments import parse_teacher_assignments, subject_from_choice_token
 
 
@@ -57,6 +57,7 @@ def _month_key_to_label(month_key: str) -> str:
 
 def create():
     """Crée la page des statistiques"""
+    # Aide IA: vue statistiques enrichie (par professeur + top prof prévu/réel)
     user_identifier = _get_user_identifier()
     available_events = [
         event for event in list_calendar_events_for_user(user_identifier)
@@ -248,11 +249,39 @@ def create():
                 return
 
             if stats_view_filter.value == 'Par professeur':
+                source_event_ids = sorted({
+                    int(event.source_event_id)
+                    for event in filtered_events
+                    if event.source_event_id is not None
+                })
+                teacher_by_source_event_id: dict[int, str] = {}
+                if source_event_ids:
+                    db = get_db()
+                    try:
+                        source_rows = (
+                            db.query(CalendarEvent.id, Utilisateur.prenom, Utilisateur.nom)
+                            .join(Utilisateur, Utilisateur.email == CalendarEvent.user_identifier)
+                            .filter(
+                                CalendarEvent.id.in_(source_event_ids),
+                                Utilisateur.role == RoleEnum.ENSEIGNANT,
+                            )
+                            .all()
+                        )
+                        for source_id, first_name, last_name in source_rows:
+                            teacher_by_source_event_id[int(source_id)] = f'{first_name} {last_name}'.strip()
+                    finally:
+                        db.close()
+
                 by_teacher: dict[str, dict[str, float]] = {}
                 for event in filtered_events:
-                    teachers = _teachers_for_subject(event.subject)
-                    if not teachers:
-                        teachers = ['Non attribué']
+                    source_id = int(event.source_event_id) if event.source_event_id is not None else None
+                    linked_teacher_name = teacher_by_source_event_id.get(source_id) if source_id is not None else None
+                    if linked_teacher_name:
+                        teachers = [linked_teacher_name]
+                    else:
+                        teachers = _teachers_for_subject(event.subject)
+                        if not teachers:
+                            teachers = ['Non attribué']
 
                     real_share = _duration_to_minutes(event.time_spent) / len(teachers)
                     planned_share = _duration_to_minutes(event.estimated_time) / len(teachers)
@@ -272,8 +301,12 @@ def create():
 
                 if sorted_teachers:
                     top_teacher_name = sorted_teachers[0]
-                    top_teacher_hours = round(by_teacher[top_teacher_name]['planned'] / 60, 2)
-                    summary_parts.append(f'<div>Prof donnant le plus de travail: {top_teacher_name} ({top_teacher_hours} h prévues)</div>')
+                    top_teacher_planned_hours = round(by_teacher[top_teacher_name]['planned'] / 60, 2)
+                    top_teacher_real_hours = round(by_teacher[top_teacher_name]['real'] / 60, 2)
+                    summary_parts.append(
+                        f'<div>Prof donnant le plus de travail: {top_teacher_name} '
+                        f'({top_teacher_planned_hours} h prévues, {top_teacher_real_hours} h réelles reportées par les élèves)</div>'
+                    )
 
                 with charts_container:
                     with ui.column().classes('stats-chart-card'):

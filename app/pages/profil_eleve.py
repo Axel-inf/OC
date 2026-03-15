@@ -9,8 +9,8 @@ if str(_APP_DIR) not in sys.path:
 from nicegui import ui, app
 from components.navbar import create_navbar
 from database.database import get_db
-from database.models import Utilisateur, Eleve
-from utils.auth import hash_password
+from database.models import Utilisateur, Eleve, EleveChangementClasse
+from database.calendar_repository import sync_student_calendar_for_class_change
 from utils.school import (
     all_school_classes,
     student_language_1_options,
@@ -24,6 +24,17 @@ def create():
     user_id = app.storage.user.get('user_id')
 
     ui.add_head_html('<link rel="stylesheet" href="/static/css/custom.css">')
+    ui.add_head_html('''
+        <script>
+            window.__profileDirty = false;
+            window.addEventListener('beforeunload', function (event) {
+                if (window.__profileDirty) {
+                    event.preventDefault();
+                    event.returnValue = '';
+                }
+            });
+        </script>
+    ''')
 
     nom_value = app.storage.user.get('nom', '')
     prenom_value = app.storage.user.get('prenom', '')
@@ -42,6 +53,16 @@ def create():
     language_options = student_language_options()
     os_options = student_os_options()
     oc_options = student_oc_options()
+
+    app.storage.user['profile_dirty'] = False
+
+    def mark_profile_dirty() -> None:
+        app.storage.user['profile_dirty'] = True
+        ui.run_javascript('window.__profileDirty = true;')
+
+    def mark_profile_clean() -> None:
+        app.storage.user['profile_dirty'] = False
+        ui.run_javascript('window.__profileDirty = false;')
 
     if user_id is not None:
         db = get_db()
@@ -157,7 +178,9 @@ def create():
                 prenom_input = ui.input('Prénom', value=prenom_value).props('outlined').classes('flex-1')
 
             email_input = ui.input('Email', value=email_value).props('outlined').classes('w-full q-mb-md')
-            password_input = ui.input('Mot de passe', password=True, password_toggle_button=True).props('outlined').classes('w-full q-mb-md')
+            with ui.row().classes('w-full q-mb-md items-center justify-between').style('padding: 0 8px;'):
+                ui.label('Mot de passe').classes('text-body2')
+                ui.link('Réinitialiser le mot de passe', '/reinitialisation-mot-de-passe').classes('text-primary')
             
             # Section École
             ui.html('<div class="section-title">Informations scolaires</div>', sanitize=False)
@@ -226,6 +249,18 @@ def create():
             with ui.element('div').classes('two-cols'):
                 basic_english = ui.checkbox('Basic English', value=basic_english_value)
                 bilingue = ui.checkbox('Bilingue', value=bilingue_value)
+
+            nom_input.on_value_change(lambda _e: mark_profile_dirty())
+            prenom_input.on_value_change(lambda _e: mark_profile_dirty())
+            classe_select.on_value_change(lambda _e: mark_profile_dirty())
+            maths_select.on_value_change(lambda _e: mark_profile_dirty())
+            langue1.on_value_change(lambda _e: mark_profile_dirty())
+            langue2.on_value_change(lambda _e: mark_profile_dirty())
+            langue3.on_value_change(lambda _e: mark_profile_dirty())
+            os_input.on_value_change(lambda _e: mark_profile_dirty())
+            oc_input.on_value_change(lambda _e: mark_profile_dirty())
+            basic_english.on_value_change(lambda _e: mark_profile_dirty())
+            bilingue.on_value_change(lambda _e: mark_profile_dirty())
             
             # Boutons d'action
             with ui.row().classes('w-full gap-4 q-mt-lg'):
@@ -240,14 +275,17 @@ def create():
 
                         user.nom = (nom_input.value or '').strip() or user.nom
                         user.prenom = (prenom_input.value or '').strip() or user.prenom
-                        new_password = (password_input.value or '').strip()
-                        if new_password:
-                            if len(new_password) < 8:
-                                ui.notify('Le mot de passe doit contenir au minimum 8 caractères', type='negative')
-                                return
-                            user.mot_de_passe = hash_password(new_password)
-
-                        eleve.classe = (classe_select.value or '').strip() or eleve.classe
+                        previous_class = (eleve.classe or '').strip()
+                        selected_class = (classe_select.value or '').strip()
+                        updated_class = selected_class or previous_class
+                        # Aide IA: journalisation du changement de classe
+                        if updated_class and updated_class != previous_class:
+                            db.add(EleveChangementClasse(
+                                eleve_id=eleve.id,
+                                ancienne_classe=previous_class,
+                                nouvelle_classe=updated_class,
+                            ))
+                        eleve.classe = updated_class
                         eleve.niveau_maths = (maths_select.value or '').strip() or eleve.niveau_maths
                         eleve.langue1 = (langue1.value or '').strip() or eleve.langue1
                         eleve.langue2 = (langue2.value or '').strip() or eleve.langue2
@@ -258,8 +296,29 @@ def create():
                         eleve.bilingue = bool(bilingue.value)
 
                         db.commit()
+
+                        if updated_class and updated_class != previous_class:
+                            try:
+                                hidden_count, created_count = sync_student_calendar_for_class_change(
+                                    user_identifier=user.email,
+                                    new_class=updated_class,
+                                    langue1=(eleve.langue1 or ''),
+                                    langue2=(eleve.langue2 or ''),
+                                    langue3=(eleve.langue3 or ''),
+                                    os_value=(eleve.os or ''),
+                                    oc_value=(eleve.oc or ''),
+                                    basic_english=bool(eleve.basic_english),
+                                )
+                                ui.notify(
+                                    f'Calendrier synchronisé: {created_count} événement(s) ajouté(s), {hidden_count} masqué(s)',
+                                    type='info',
+                                )
+                            except Exception:
+                                ui.notify('Classe mise à jour, mais la synchronisation du calendrier a échoué', type='warning')
+
                         app.storage.user['nom'] = user.nom
                         app.storage.user['prenom'] = user.prenom
+                        mark_profile_clean()
                         ui.notify('Profil mis à jour avec succès!', type='positive')
                     except Exception:
                         db.rollback()
@@ -268,15 +327,25 @@ def create():
                         db.close()
                 
                 async def handle_logout():
+                    if app.storage.user.get('profile_dirty', False):
+                        ui.notify('Veuillez enregistrer vos modifications', type='warning', timeout=3)
+                        ui.run_javascript(
+                            '''
+                            const saveBtn = document.getElementById('profile-save-button');
+                            if (saveBtn) saveBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            '''
+                        )
+                        return
                     app.storage.user.clear()
                     ui.notify('Déconnexion réussie', type='info')
                     ui.navigate.to('/login')
                 
-                ui.button(
+                save_button = ui.button(
                     'ENREGISTRER',
                     icon='save',
                     on_click=handle_save
                 ).props('color=primary').classes('flex-1')
+                save_button.props('id=profile-save-button')
                 
                 ui.button(
                     'SE DÉCONNECTER',

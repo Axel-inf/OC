@@ -36,7 +36,7 @@ def seed_demo_school_data() -> None:
         # Branches for teachers
         branches_options = [
             'Mathématiques,Physique,OS Physique et application des mathématiques',
-            'Français,Allemand,OC Histoire',
+            'Français,Allemand',
             'Anglais,Basic English,OC Informatique',
             'Biologie,Chimie,OS Biologie et chimie',
             'Histoire,Géographie,OC Géographie',

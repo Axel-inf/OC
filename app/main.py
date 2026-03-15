@@ -5,7 +5,7 @@ from datetime import datetime
 from nicegui import ui, app
 from fastapi import Body, HTTPException
 from database.database import get_db
-from database.models import Utilisateur
+from database.models import Utilisateur, CalendarEvent
 from database.database import init_database
 from database.calendar_repository import (
     delete_calendar_event,
@@ -19,12 +19,14 @@ from config.settings import (
     APP_NAME,
     CALENDAR_AUTO_ROLLOVER_HOUR,
     CALENDAR_AUTO_ROLLOVER_MINUTE,
+    SEED_DEMO_DATA_ON_STARTUP,
     SECRET_KEY,
 )
 
 # Initialisation de la base de données
 init_database()
-seed_demo_school_data()
+if SEED_DEMO_DATA_ON_STARTUP:
+    seed_demo_school_data()
 
 # Configuration de l'application
 # Utiliser le chemin absolu pour servir les fichiers statiques
@@ -72,10 +74,38 @@ async def _stop_calendar_rollover_loop() -> None:
 
 @app.post('/api/calendar-events/delete')
 async def api_delete_calendar_event(payload: dict = Body(...)):
+    # Aide IA: sécurisation de la suppression via identité de session (pas de user_identifier client)
     event_id = int(payload.get('event_id', 0))
-    user_identifier = str(payload.get('user_identifier', '')).strip()
-    if event_id <= 0 or not user_identifier:
+    if event_id <= 0:
         raise HTTPException(status_code=400, detail='Paramètres invalides')
+
+    if not _is_session_authenticated():
+        raise HTTPException(status_code=401, detail='Session non authentifiée')
+
+    user_identifier = str(app.storage.user.get('email') or '').strip()
+    user_role = str(app.storage.user.get('role') or '').strip().lower()
+    if not user_identifier:
+        raise HTTPException(status_code=401, detail='Session invalide')
+
+    db = get_db()
+    try:
+        owned_event = (
+            db.query(CalendarEvent)
+            .filter(
+                CalendarEvent.id == event_id,
+                CalendarEvent.user_identifier == user_identifier,
+                CalendarEvent.is_hidden.is_(False),
+            )
+            .first()
+        )
+    finally:
+        db.close()
+
+    if owned_event is None:
+        raise HTTPException(status_code=404, detail='Événement introuvable')
+
+    if user_role == 'eleve' and owned_event.source_event_id is not None:
+        raise HTTPException(status_code=403, detail='Suppression non autorisée pour cet événement partagé')
 
     deleted = delete_calendar_event(event_id, user_identifier)
     if not deleted:
@@ -86,11 +116,18 @@ async def api_delete_calendar_event(payload: dict = Body(...)):
 
 @app.post('/api/calendar-events/time-spent')
 async def api_update_calendar_time_spent(payload: dict = Body(...)):
+    # Aide IA: sécurisation de la mise à jour du temps passé via identité de session
     event_id = int(payload.get('event_id', 0))
-    user_identifier = str(payload.get('user_identifier', '')).strip()
     time_spent = str(payload.get('time_spent', '')).strip() or '0 minute'
-    if event_id <= 0 or not user_identifier:
+    if event_id <= 0:
         raise HTTPException(status_code=400, detail='Paramètres invalides')
+
+    if not _is_session_authenticated():
+        raise HTTPException(status_code=401, detail='Session non authentifiée')
+
+    user_identifier = str(app.storage.user.get('email') or '').strip()
+    if not user_identifier:
+        raise HTTPException(status_code=401, detail='Session invalide')
 
     updated = update_calendar_event_time_spent(event_id, user_identifier, time_spent)
     if not updated:
