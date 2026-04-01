@@ -11,9 +11,10 @@ from database.calendar_repository import (
     create_calendar_event,
     list_calendar_events_for_user,
     seed_default_calendar_events_for_user,
+    sync_student_calendar_for_class_change,
 )
 from database.database import get_db
-from database.models import Enseignant, Utilisateur
+from database.models import Eleve, Enseignant, Utilisateur
 from utils.teacher_assignments import split_choice_token
 
 
@@ -196,6 +197,27 @@ def create():
     user_identifier = _get_user_identifier()
     user_role = str(app.storage.user.get('role') or '').strip().lower()
     is_teacher = user_role == 'enseignant'
+
+    # Aide IA: synchroniser les devoirs de classe avant affichage du calendrier élève
+    if user_role == 'eleve':
+        db = get_db()
+        try:
+            user = db.query(Utilisateur).filter(Utilisateur.email == user_identifier).first()
+            if user is not None:
+                eleve = db.query(Eleve).filter(Eleve.utilisateur_id == user.id).first()
+                if eleve is not None:
+                    sync_student_calendar_for_class_change(
+                        user_identifier=user_identifier,
+                        new_class=(eleve.classe or ''),
+                        langue1=(eleve.langue1 or ''),
+                        langue2=(eleve.langue2 or ''),
+                        langue3=(eleve.langue3 or ''),
+                        os_value=(eleve.os or ''),
+                        oc_value=(eleve.oc or ''),
+                        basic_english=bool(eleve.basic_english),
+                    )
+        finally:
+            db.close()
     
     # Load teacher's subjects if teacher
     teacher_subjects: set[str] = set()
@@ -316,18 +338,73 @@ def create():
             }
 
             window.clearTimeSpentInput = function(inputElement) {
+                inputElement.dataset.lastSavedValue = inputElement.value || 'À compléter';
                 if (inputElement.value === 'À compléter') {
                     inputElement.value = '';
                 }
             }
 
+            window.normalizeTimeSpentInput = function(rawValue) {
+                const normalized = (rawValue || '').trim().toLowerCase().replace(',', '.');
+                if (!normalized || normalized === 'a completer' || normalized === 'à compléter') {
+                    return '0 minute';
+                }
+
+                const compact = normalized.match(/^(\d+)\s*h\s*(\d{1,2})\s*(?:min|minute|minutes)?$/);
+                if (compact) {
+                    const hours = parseInt(compact[1], 10);
+                    const minutes = parseInt(compact[2], 10);
+                    if (minutes >= 60) return null;
+                    const total = (hours * 60) + minutes;
+                    if (total <= 0) return null;
+                    const h = Math.floor(total / 60);
+                    const m = total % 60;
+                    if (h && m) return `${h} h ${m} min`;
+                    if (h) return `${h} h`;
+                    return `${m} min`;
+                }
+
+                const long = normalized.match(/^(\d+)\s*(?:heure|heures|h)\s*(\d{1,2})\s*(?:minute|minutes|min)$/);
+                if (long) {
+                    const hours = parseInt(long[1], 10);
+                    const minutes = parseInt(long[2], 10);
+                    if (minutes >= 60) return null;
+                    const total = (hours * 60) + minutes;
+                    if (total <= 0) return null;
+                    const h = Math.floor(total / 60);
+                    const m = total % 60;
+                    if (h && m) return `${h} h ${m} min`;
+                    if (h) return `${h} h`;
+                    return `${m} min`;
+                }
+
+                const hoursOnly = normalized.match(/^(\d+)\s*(?:heure|heures|h)$/);
+                if (hoursOnly) {
+                    const total = parseInt(hoursOnly[1], 10) * 60;
+                    return total > 0 ? `${Math.floor(total / 60)} h` : null;
+                }
+
+                const minutesOnly = normalized.match(/^(\d+)\s*(?:minute|minutes|min)$/);
+                if (minutesOnly) {
+                    const total = parseInt(minutesOnly[1], 10);
+                    return total > 0 ? `${total} min` : null;
+                }
+
+                return null;
+            }
+
             window.updateCalendarTimeSpent = async function(eventId, inputElement) {
                 // Aide IA: appel API sans identifiant utilisateur côté client
                 const enteredValue = (inputElement.value || '').trim();
-                const valueToSave = enteredValue.length > 0 ? enteredValue : '0 minute';
+                const valueToSave = window.normalizeTimeSpentInput(enteredValue);
+                if (valueToSave === null) {
+                    inputElement.value = inputElement.dataset.lastSavedValue || 'À compléter';
+                    alert('Format invalide: utilisez uniquement min, h, ou h+min (ex: 30 min, 1 h, 1 h 30 min).');
+                    return;
+                }
 
                 try {
-                    await fetch('/api/calendar-events/time-spent', {
+                    const response = await fetch('/api/calendar-events/time-spent', {
                         method: 'POST',
                         headers: {'Content-Type': 'application/json'},
                         body: JSON.stringify({
@@ -336,10 +413,20 @@ def create():
                         }),
                     });
 
-                    if (!enteredValue) {
+                    if (!response.ok) {
+                        inputElement.value = inputElement.dataset.lastSavedValue || 'À compléter';
+                        return;
+                    }
+
+                    if (valueToSave === '0 minute') {
                         inputElement.value = 'À compléter';
+                        inputElement.dataset.lastSavedValue = 'À compléter';
+                    } else {
+                        inputElement.value = valueToSave;
+                        inputElement.dataset.lastSavedValue = valueToSave;
                     }
                 } catch (error) {
+                    inputElement.value = inputElement.dataset.lastSavedValue || 'À compléter';
                     console.error('Erreur de sauvegarde du temps passé', error);
                 }
             }

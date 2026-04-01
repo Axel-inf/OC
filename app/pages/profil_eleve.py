@@ -278,7 +278,7 @@ def create():
                         previous_class = (eleve.classe or '').strip()
                         selected_class = (classe_select.value or '').strip()
                         updated_class = selected_class or previous_class
-                        # Aide IA: journalisation du changement de classe
+                        # Aide IA: enregistrement du changement de classe dans la BD pour traçabilité historique
                         if updated_class and updated_class != previous_class:
                             db.add(EleveChangementClasse(
                                 eleve_id=eleve.id,

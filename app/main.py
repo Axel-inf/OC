@@ -10,6 +10,7 @@ from database.database import init_database
 from database.calendar_repository import (
     delete_calendar_event,
     move_unfinished_events_to_next_day,
+    normalize_time_spent_strict,
     update_calendar_event_time_spent,
 )
 from pages import login, inscription, accueil, calendrier, formulaire, profil_eleve, profil_professeur, statistiques, reset_password
@@ -118,7 +119,7 @@ async def api_delete_calendar_event(payload: dict = Body(...)):
 async def api_update_calendar_time_spent(payload: dict = Body(...)):
     # Aide IA: sécurisation de la mise à jour du temps passé via identité de session
     event_id = int(payload.get('event_id', 0))
-    time_spent = str(payload.get('time_spent', '')).strip() or '0 minute'
+    time_spent_raw = str(payload.get('time_spent', '')).strip()
     if event_id <= 0:
         raise HTTPException(status_code=400, detail='Paramètres invalides')
 
@@ -128,6 +129,10 @@ async def api_update_calendar_time_spent(payload: dict = Body(...)):
     user_identifier = str(app.storage.user.get('email') or '').strip()
     if not user_identifier:
         raise HTTPException(status_code=401, detail='Session invalide')
+
+    time_spent = normalize_time_spent_strict(time_spent_raw)
+    if time_spent is None:
+        raise HTTPException(status_code=400, detail='Format invalide: utilisez min, h, ou h+min (ex: 30 min, 1 h, 1 h 30 min)')
 
     updated = update_calendar_event_time_spent(event_id, user_identifier, time_spent)
     if not updated:

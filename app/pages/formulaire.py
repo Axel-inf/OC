@@ -780,6 +780,18 @@ def create(edit_event_id: int | None = None):
                                 )
                         else:
                             if is_edit_mode:
+                                # Aide IA: propager les mises à jour des devoirs à tous les élèves de la classe
+                                student_current_class = None
+                                db = get_db()
+                                try:
+                                    student_user = db.query(Utilisateur).filter(Utilisateur.email == user_identifier).first()
+                                    if student_user:
+                                        student_profile = db.query(Eleve).filter(Eleve.utilisateur_id == student_user.id).first()
+                                        if student_profile:
+                                            student_current_class = student_profile.classe
+                                finally:
+                                    db.close()
+
                                 updated = update_calendar_event(
                                     event_id=int(edit_event['id']),
                                     user_identifier=user_identifier,
@@ -791,15 +803,29 @@ def create(edit_event_id: int | None = None):
                                     estimated_time=normalized_estimation,
                                     exam_coefficient=coefficient_value,
                                     exam_duration=evaluation_duration_value,
-                                    target_class=None,
-                                    propagate_to_linked=False,
+                                    target_class=student_current_class,
+                                    propagate_to_linked=True,
                                 )
                                 if not updated:
                                     ui.notify('Impossible de modifier cet événement', type='negative')
                                     return
                                 ui.notify('Événement modifié avec succès!', type='positive')
                             else:
-                                create_calendar_event(
+                                # Aide IA: partage des devoirs d'élèves avec les autres élèves de la même classe
+                                # Récupérer la classe actuelle de l'élève
+                                student_class = None
+                                db = get_db()
+                                try:
+                                    student_user = db.query(Utilisateur).filter(Utilisateur.email == user_identifier).first()
+                                    if student_user:
+                                        student_profile = db.query(Eleve).filter(Eleve.utilisateur_id == student_user.id).first()
+                                        if student_profile:
+                                            student_class = student_profile.classe
+                                finally:
+                                    db.close()
+
+                                # Créer un événement source pour la classe
+                                source_event_id = create_calendar_event(
                                     user_identifier=user_identifier,
                                     event_type=event_type,
                                     subject=branche_value,
@@ -811,8 +837,39 @@ def create(edit_event_id: int | None = None):
                                     exam_duration=evaluation_duration_value,
                                     time_spent='0 minute',
                                     source_event_id=None,
-                                    target_class=None,
+                                    target_class=student_class,
                                 )
+
+                                # Propager aux autres élèves de la même classe
+                                if student_class:
+                                    db = get_db()
+                                    try:
+                                        classmates = (
+                                            db.query(Eleve, Utilisateur)
+                                            .join(Utilisateur, Utilisateur.id == Eleve.utilisateur_id)
+                                            .filter(
+                                                Eleve.classe == student_class,
+                                                Utilisateur.email != user_identifier
+                                            )
+                                            .all()
+                                        )
+                                        for classmate_student, classmate_user in classmates:
+                                            create_calendar_event(
+                                                user_identifier=classmate_user.email,
+                                                event_type=event_type,
+                                                subject=branche_value,
+                                                title=titre_value,
+                                                description=description_value,
+                                                date_iso=parsed_date.isoformat(),
+                                                estimated_time=normalized_estimation,
+                                                exam_coefficient=coefficient_value,
+                                                exam_duration=evaluation_duration_value,
+                                                time_spent='0 minute',
+                                                source_event_id=source_event_id,
+                                                target_class=student_class,
+                                            )
+                                    finally:
+                                        db.close()
 
                                 ui.notify(f'{type_event.value} ajouté avec succès!', type='positive')
                         ui.navigate.to('/calendrier')

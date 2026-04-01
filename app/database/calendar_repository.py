@@ -72,14 +72,16 @@ def sync_student_calendar_for_class_change(
         hidden_count = 0
         created_count = 0
 
-        # Hide linked events from other classes to prevent stale homework visibility.
+        # Aide IA: masquer tous les événements de classe hors nouvelle classe (liés ou source)
         stale_events = (
             db.query(CalendarEvent)
             .filter(
                 CalendarEvent.user_identifier == user_identifier,
                 CalendarEvent.is_hidden.is_(False),
-                CalendarEvent.source_event_id.isnot(None),
-                (CalendarEvent.target_class.is_(None) | (CalendarEvent.target_class != normalized_class)),
+                (
+                    (CalendarEvent.target_class.isnot(None) & (CalendarEvent.target_class != normalized_class))
+                    | (CalendarEvent.source_event_id.isnot(None) & CalendarEvent.target_class.is_(None))
+                ),
             )
             .all()
         )
@@ -102,14 +104,24 @@ def sync_student_calendar_for_class_change(
             if source_id is not None
         }
 
-        teacher_events = (
+        class_source_events = (
+            db.query(CalendarEvent)
+            .filter(
+                CalendarEvent.is_hidden.is_(False),
+                CalendarEvent.source_event_id.is_(None),
+                CalendarEvent.target_class == normalized_class,
+            )
+            .all()
+        )
+
+        teacher_global_events = (
             db.query(CalendarEvent)
             .join(Utilisateur, Utilisateur.email == CalendarEvent.user_identifier)
             .filter(
                 Utilisateur.role == RoleEnum.ENSEIGNANT,
                 CalendarEvent.is_hidden.is_(False),
                 CalendarEvent.source_event_id.is_(None),
-                (CalendarEvent.target_class == normalized_class) | CalendarEvent.target_class.is_(None),
+                CalendarEvent.target_class.is_(None),
             )
             .all()
         )
@@ -136,39 +148,47 @@ def sync_student_calendar_for_class_change(
             class_subjects = {subject_from_choice_token(token) for token in class_tokens}
             return (subject or '').strip() in class_subjects
 
-        for teacher_event in teacher_events:
-            if teacher_event.id in existing_source_ids:
+        candidate_source_events: dict[int, CalendarEvent] = {}
+        for source_event in class_source_events:
+            candidate_source_events[source_event.id] = source_event
+        for source_event in teacher_global_events:
+            candidate_source_events[source_event.id] = source_event
+
+        for source_event in candidate_source_events.values():
+            # Ne pas créer de doublon pour l'auteur: son événement source est déjà visible dans son calendrier.
+            if (source_event.user_identifier or '').strip() == user_identifier:
                 continue
 
-            event_target_class = (teacher_event.target_class or '').strip()
-            if event_target_class and event_target_class != normalized_class:
+            if source_event.id in existing_source_ids:
                 continue
+
+            event_target_class = (source_event.target_class or '').strip()
             if not event_target_class:
                 teacher_user = (
                     db.query(Utilisateur)
-                    .filter(Utilisateur.email == teacher_event.user_identifier)
+                    .filter(Utilisateur.email == source_event.user_identifier)
                     .first()
                 )
                 if not _teacher_teaches_subject_for_class(
                     teacher_user.id if teacher_user else None,
-                    teacher_event.subject,
+                    source_event.subject,
                 ):
                     continue
 
             db.add(CalendarEvent(
                 user_identifier=user_identifier,
-                event_type=teacher_event.event_type,
-                subject=teacher_event.subject,
-                title=teacher_event.title,
-                description=teacher_event.description,
-                date_iso=teacher_event.date_iso,
-                estimated_time=teacher_event.estimated_time,
-                exam_coefficient=teacher_event.exam_coefficient,
-                exam_duration=teacher_event.exam_duration,
+                event_type=source_event.event_type,
+                subject=source_event.subject,
+                title=source_event.title,
+                description=source_event.description,
+                date_iso=source_event.date_iso,
+                estimated_time=source_event.estimated_time,
+                exam_coefficient=source_event.exam_coefficient,
+                exam_duration=source_event.exam_duration,
                 time_spent='0 minute',
                 target_class=normalized_class,
                 is_hidden=False,
-                source_event_id=teacher_event.id,
+                source_event_id=source_event.id,
             ))
             created_count += 1
 
@@ -361,6 +381,45 @@ def update_calendar_event_time_spent(event_id: int, user_identifier: str, time_s
         return True
     finally:
         db.close()
+
+
+def normalize_time_spent_strict(raw_value: str) -> str | None:
+    normalized = (raw_value or '').strip().lower().replace(',', '.')
+    if not normalized:
+        return '0 minute'
+
+    if normalized in {'a completer', 'à compléter'}:
+        return '0 minute'
+
+    compact_match = re.fullmatch(r'(\d+)\s*h\s*(\d{1,2})\s*(?:min|minute|minutes)?', normalized)
+    if compact_match:
+        hours_value = int(compact_match.group(1))
+        minutes_value = int(compact_match.group(2))
+        if minutes_value >= 60:
+            return None
+        total = (hours_value * 60) + minutes_value
+        return _format_minutes_for_storage(total) if total > 0 else None
+
+    long_match = re.fullmatch(r'(\d+)\s*(?:heure|heures|h)\s*(\d{1,2})\s*(?:minute|minutes|min)', normalized)
+    if long_match:
+        hours_value = int(long_match.group(1))
+        minutes_value = int(long_match.group(2))
+        if minutes_value >= 60:
+            return None
+        total = (hours_value * 60) + minutes_value
+        return _format_minutes_for_storage(total) if total > 0 else None
+
+    hours_only_match = re.fullmatch(r'(\d+)\s*(?:heure|heures|h)', normalized)
+    if hours_only_match:
+        total = int(hours_only_match.group(1)) * 60
+        return _format_minutes_for_storage(total) if total > 0 else None
+
+    minutes_only_match = re.fullmatch(r'(\d+)\s*(?:minute|minutes|min)', normalized)
+    if minutes_only_match:
+        total = int(minutes_only_match.group(1))
+        return _format_minutes_for_storage(total) if total > 0 else None
+
+    return None
 
 
 def get_calendar_event_for_user(event_id: int, user_identifier: str) -> CalendarEvent | None:
