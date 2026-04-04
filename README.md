@@ -79,7 +79,32 @@ python main.py
 
 L'application sera accessible sur : **http://localhost:8080**
 
-## 📁 Structure du projet
+## � Documentation
+
+La documentation complète du projet se trouve dans le dossier `docs/`. 
+
+### Accès à la documentation
+
+**Option 1 : Ouvrir le Readme de la documentation (recommandé)**
+```bash
+code docs/Readme.md
+```
+Ou naviguez vers `docs/Readme.md` dans l'explorateur VS Code.
+
+**Option 2 : Construire la documentation Sphinx (HTML)**
+```bash
+cd docs
+pip install -r requirements.txt  # Installer les dépendances Sphinx si nécessaire
+make html                        # Linux/Mac
+# ou sur Windows:
+make.bat html
+```
+Puis ouvrez `docs/build/html/index.html` dans votre navigateur.
+
+**Option 3 : Consultation directe des sources**
+- Les fichiers source se trouvent dans `docs/source/`
+
+## �📁 Structure du projet
 
 ```
 planification_devoirs/

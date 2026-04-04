@@ -300,13 +300,55 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 
 ---
 
+### 18. Rédaction et structuration de la documentation Sphinx
+- **Fichier** : [docs/source/presentation.md](docs/source/presentation.md)
+- **Ligne** : 1+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour reformuler la motivation du projet et préciser la répartition du travail entre Figma, CSS et base de données
+- **Détail** : présentation du projet réécrite avec une formulation plus claire et plus adaptée au rendu final
 
+- **Fichier** : [docs/source/manuel.md](docs/source/manuel.md)
+- **Ligne** : 1+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour rédiger le manuel utilisateur, les étapes d'installation et les conseils d'utilisation
+- **Détail** : parcours utilisateur, commandes d'installation et consignes de consultation de la documentation
 
+- **Fichier** : [docs/source/code.md](docs/source/code.md)
+- **Ligne** : 1+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour documenter l'architecture, le point d'entrée, les concepts techniques et les parties complexes du code
+- **Détail** : création d'un chapitre technique séparé pour expliquer le fonctionnement du projet
+
+- **Fichier** : [docs/source/critique.md](docs/source/critique.md)
+- **Ligne** : 1+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour rédiger le regard critique, les limites et les améliorations possibles
+- **Détail** : séparation du bilan, des limites et des pistes d'amélioration dans un chapitre dédié
+
+- **Fichier** : [docs/source/apprentissages.md](docs/source/apprentissages.md)
+- **Ligne** : 1+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour créer un chapitre distinct sur ce qui a été appris pendant le projet
+- **Détail** : mise en page d'une section finale dédiée aux acquis techniques, conceptuels et de gestion de projet
+
+- **Fichier** : [docs/source/index.rst](docs/source/index.rst)
+- **Ligne** : 1+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour organiser la toctree et placer les chapitres dans le bon ordre
+- **Détail** : insertion du chapitre apprentissages à la fin et maintien de la structure générale de la documentation
+
+- **Fichier** : [docs/source/conf.py](docs/source/conf.py)
+- **Ligne** : 1+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour stabiliser l'affichage de la navigation Sphinx
+- **Détail** : réglage des options du thème pour garder une table des matières cohérente entre les pages
+
+---
 
 ## Statistiques
-- **Nombre total d'utilisations d'IA documentées** : ~45 références
-- **Fichiers concernés** : 12
-- **Domaines** : Backend sécurité, Modèles de données, Synchronisation calendrier, Frontend UI
+- **Nombre total d'utilisations d'IA documentées** : ~53 références
+- **Fichiers concernés** : 17
+- **Domaines** : Backend sécurité, Modèles de données, Synchronisation calendrier, Frontend UI, Documentation
 - **Période** : 15.01.2026 - 04.04.2026
 
 ---
@@ -322,6 +364,7 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 | **26.02.2026** | Synchronisation complète + sécurité complete + migrations | `database.py`, `calendar_repository.py`, `models.py`, `main.py`, `calendrier.py` |
 | **01.04.2026** | Synchronisation élève-classe, validation stricte du temps passé, anti-doublons | `calendrier.py`, `calendar_repository.py`, `main.py`, `formulaire.py`, `profil_eleve.py` |
 | **04.04.2026** | Règles pédagogiques par année, robustesse classes (casse), persistance coche "fait", suppression de `Non attribué`, sync options/OS/OC, UX accueil/calendrier | `teacher_assignments.py`, `profil_professeur.py`, `formulaire.py`, `statistiques.py`, `charge_eleve.py`, `models.py`, `database.py`, `main.py`, `calendrier.py`, `calendar_repository.py`, `profil_eleve.py`, `accueil.py` |
+| **04.04.2026** | Rédaction de la documentation Sphinx, séparation des chapitres, réglage de la navigation et du plan | `presentation.md`, `manuel.md`, `code.md`, `critique.md`, `apprentissages.md`, `index.rst`, `conf.py` |
 
 ---
 
