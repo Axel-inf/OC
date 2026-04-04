@@ -2,16 +2,14 @@
 from nicegui import ui, app
 from components.navbar import create_navbar
 from database.database import get_db
-from database.models import Utilisateur, Enseignant
-from utils.school import all_school_classes, os_subjects, oc_subjects
+from database.models import Utilisateur, Enseignant, CalendarEvent
+from utils.school import all_school_classes
 from utils.teacher_assignments import (
     build_subject_options_for_class,
     is_bilingual_choice_token,
-    make_choice_token,
     parse_teacher_assignments,
     serialize_teacher_assignments,
     subject_from_choice_token,
-    token_to_html_label,
     token_to_label,
 )
 
@@ -35,6 +33,15 @@ def create():
     nom_value = app.storage.user.get('nom', '')
     prenom_value = app.storage.user.get('prenom', '')
     email_value = app.storage.user.get('email', '')
+    class_catalog = all_school_classes()
+    catalog_lookup = {class_name.lower(): class_name for class_name in class_catalog}
+
+    def normalize_class_name(class_name: str) -> str:
+        normalized = (class_name or '').strip()
+        if not normalized:
+            return ''
+        return catalog_lookup.get(normalized.lower(), normalized)
+
     classes_values: list[str] = []
     class_branch_values: dict[str, set[str]] = {}
     class_os_values: dict[str, set[str]] = {}
@@ -52,8 +59,22 @@ def create():
             enseignant = db.query(Enseignant).filter(Enseignant.utilisateur_id == user_id).first()
             if enseignant is not None:
                 parsed_assignments = parse_teacher_assignments(enseignant.branches, enseignant.classes)
-                classes_values = sorted(parsed_assignments.keys())
+                stored_classes = sorted({
+                    normalized
+                    for item in (enseignant.classes or '').split(',')
+                    for normalized in [normalize_class_name(item)]
+                    if normalized
+                })
+                classes_values = stored_classes or sorted({
+                    normalized
+                    for class_name in parsed_assignments.keys()
+                    for normalized in [normalize_class_name(class_name)]
+                    if normalized
+                })
                 for class_name, tokens in parsed_assignments.items():
+                    normalized_class_name = normalize_class_name(class_name)
+                    if not normalized_class_name:
+                        continue
                     branch_tokens: set[str] = set()
                     os_tokens: set[str] = set()
                     oc_tokens: set[str] = set()
@@ -65,14 +86,25 @@ def create():
                             oc_tokens.add(token)
                         else:
                             branch_tokens.add(token)
-                    class_branch_values[class_name] = branch_tokens
-                    class_os_values[class_name] = os_tokens
-                    class_oc_values[class_name] = oc_tokens
+                    class_branch_values.setdefault(normalized_class_name, set()).update(branch_tokens)
+                    class_os_values.setdefault(normalized_class_name, set()).update(os_tokens)
+                    class_oc_values.setdefault(normalized_class_name, set()).update(oc_tokens)
         finally:
             db.close()
 
-    class_catalog = all_school_classes()
     selected_classes = set(classes_values)
+
+    def values_for_class(values_store: dict[str, set[str]], class_name: str) -> set[str]:
+        direct_values = values_store.get(class_name)
+        if direct_values is not None:
+            return set(direct_values)
+
+        target = (class_name or '').strip().lower()
+        merged_values: set[str] = set()
+        for key, values in values_store.items():
+            if (key or '').strip().lower() == target:
+                merged_values.update(values)
+        return merged_values
 
     app.storage.user['profile_dirty'] = False
 
@@ -219,15 +251,8 @@ def create():
                         ui.html(f'<div class="section-title">{class_name}</div>', sanitize=False)
                         options_for_dropdown = build_subject_options_for_class(class_name)
                         branch_options: dict[str, str] = {}
-                        # OS/OC must always be available, regardless of selected class.
-                        os_options: dict[str, str] = {
-                            make_choice_token(subject, 'standard'): subject
-                            for subject in sorted(os_subjects())
-                        }
-                        oc_options: dict[str, str] = {
-                            make_choice_token(subject, 'standard'): subject
-                            for subject in sorted(oc_subjects())
-                        }
+                        os_options: dict[str, str] = {}
+                        oc_options: dict[str, str] = {}
 
                         for token in sorted(options_for_dropdown.keys()):
                             label = token_to_label(token)
@@ -239,12 +264,14 @@ def create():
                                 branch_options[token] = label
 
                         def render_selector_block(
+                            class_key: str,
                             field_label: str,
                             dialog_title: str,
                             option_map: dict[str, str],
                             values_store: dict[str, set[str]],
                         ) -> None:
-                            current_tokens = set(values_store.get(class_name, set()))
+                            values_store.setdefault(class_key, set())
+                            current_tokens = set(values_store.get(class_key, set()))
                             selected_labels = [option_map[token] for token in current_tokens if token in option_map]
                             display_text = ', '.join(sorted(selected_labels)) if selected_labels else 'Aucune sélection'
 
@@ -264,7 +291,7 @@ def create():
 
                             with ui.dialog().props('persistent') as selector_dialog:
                                 with ui.card().style('min-width: 400px; max-width: 600px;'):
-                                    ui.label(f'{class_name} - {dialog_title}').classes('text-h6 q-mb-md')
+                                    ui.label(f'{class_key} - {dialog_title}').classes('text-h6 q-mb-md')
 
                                     with ui.row().classes('w-full justify-end q-mb-sm'):
                                         ui.button('Annuler', on_click=selector_dialog.close).props('flat')
@@ -277,13 +304,13 @@ def create():
                                             checkboxes_dict[token] = cb
 
                                 def update_checkboxes() -> None:
-                                    latest_tokens = set(values_store.get(class_name, set()))
+                                    latest_tokens = set(values_store.get(class_key, set()))
                                     for token, cb in checkboxes_dict.items():
                                         cb.value = token in latest_tokens
 
                             def save_selection() -> None:
                                 selected_tokens = {token for token, cb in checkboxes_dict.items() if cb.value}
-                                values_store[class_name] = selected_tokens
+                                values_store[class_key] = selected_tokens
                                 selected_display = [option_map[token] for token in selected_tokens if token in option_map]
                                 display_content.set_text(', '.join(sorted(selected_display)) if selected_display else 'Aucune sélection')
                                 mark_profile_dirty()
@@ -297,23 +324,33 @@ def create():
                             display_field.on('click', lambda _e: open_dialog())
 
                         render_selector_block(
+                            class_key=class_name,
                             field_label='Branches enseignées',
                             dialog_title='Branches enseignées',
                             option_map=branch_options,
                             values_store=class_branch_values,
                         )
-                        render_selector_block(
-                            field_label='OS enseignées',
-                            dialog_title='OS enseignées',
-                            option_map=os_options,
-                            values_store=class_os_values,
-                        )
-                        render_selector_block(
-                            field_label='OC enseignées',
-                            dialog_title='OC enseignées',
-                            option_map=oc_options,
-                            values_store=class_oc_values,
-                        )
+                        if os_options:
+                            render_selector_block(
+                                class_key=class_name,
+                                field_label='OS enseignées',
+                                dialog_title='OS enseignées',
+                                option_map=os_options,
+                                values_store=class_os_values,
+                            )
+                        else:
+                            class_os_values[class_name] = set()
+
+                        if oc_options:
+                            render_selector_block(
+                                class_key=class_name,
+                                field_label='OC enseignées',
+                                dialog_title='OC enseignées',
+                                option_map=oc_options,
+                                values_store=class_oc_values,
+                            )
+                        else:
+                            class_oc_values[class_name] = set()
 
             def render_classes(filter_value: str = '') -> None:
                 classes_box.clear()
@@ -331,6 +368,9 @@ def create():
                         def on_change(event, cls=class_name):
                             if event.value:
                                 selected_classes.add(cls)
+                                class_branch_values[cls] = set()
+                                class_os_values[cls] = set()
+                                class_oc_values[cls] = set()
                             else:
                                 selected_classes.discard(cls)
                                 class_branch_values.pop(cls, None)
@@ -364,13 +404,22 @@ def create():
 
                         assignments_by_class: dict[str, list[str]] = {}
                         for class_name in sorted(selected_classes):
+                            allowed_tokens = set(build_subject_options_for_class(class_name).keys())
                             values = sorted(
-                                set(class_branch_values.get(class_name, set()))
-                                | set(class_os_values.get(class_name, set()))
-                                | set(class_oc_values.get(class_name, set()))
+                                (
+                                    values_for_class(class_branch_values, class_name)
+                                    | values_for_class(class_os_values, class_name)
+                                    | values_for_class(class_oc_values, class_name)
+                                )
+                                & allowed_tokens
                             )
                             if not values:
-                                ui.notify(f'Sélectionnez au moins une branche/OS/OC pour la classe {class_name}', type='negative')
+                                allowed_labels = [token_to_label(token) for token in allowed_tokens]
+                                has_os_or_oc = any(label.startswith('OS ') or label.startswith('OC ') for label in allowed_labels)
+                                if has_os_or_oc:
+                                    ui.notify(f'Sélectionnez au moins une branche/OS/OC pour la classe {class_name}', type='negative')
+                                else:
+                                    ui.notify(f'Sélectionnez au moins une branche pour la classe {class_name}', type='negative')
                                 return
                             assignments_by_class[class_name] = values
 
@@ -380,6 +429,14 @@ def create():
 
                         user.nom = (nom_input.value or '').strip() or user.nom
                         user.prenom = (prenom_input.value or '').strip() or user.prenom
+                        previous_classes = {
+                            normalized
+                            for item in (enseignant.classes or '').split(',')
+                            for normalized in [normalize_class_name(item)]
+                            if normalized
+                        }
+                        removed_classes = previous_classes - set(selected_classes)
+
                         enseignant.classes = ','.join(sorted(selected_classes))
                         enseignant.branches = serialize_teacher_assignments(assignments_by_class)
                         selected_os_subjects = sorted({
@@ -398,6 +455,38 @@ def create():
                         enseignant.oc = ','.join(selected_oc_subjects)
                         enseignant.basic_english = has_basic_english
                         enseignant.bilingue = has_bilingual_course
+
+                        # Masquer les devoirs/examens publiés pour les classes retirées,
+                        # ainsi que leurs événements liés chez les élèves.
+                        removed_source_event_ids: list[int] = []
+                        if removed_classes and user.email:
+                            teacher_events = (
+                                db.query(CalendarEvent)
+                                .filter(
+                                    CalendarEvent.user_identifier == user.email,
+                                    CalendarEvent.source_event_id.is_(None),
+                                    CalendarEvent.is_hidden.is_(False),
+                                    CalendarEvent.target_class.isnot(None),
+                                )
+                                .all()
+                            )
+                            for teacher_event in teacher_events:
+                                event_class = normalize_class_name(teacher_event.target_class or '')
+                                if event_class in removed_classes:
+                                    teacher_event.is_hidden = True
+                                    removed_source_event_ids.append(int(teacher_event.id))
+
+                        if removed_source_event_ids:
+                            linked_events = (
+                                db.query(CalendarEvent)
+                                .filter(
+                                    CalendarEvent.source_event_id.in_(removed_source_event_ids),
+                                    CalendarEvent.is_hidden.is_(False),
+                                )
+                                .all()
+                            )
+                            for linked_event in linked_events:
+                                linked_event.is_hidden = True
 
                         db.commit()
                         app.storage.user['nom'] = user.nom

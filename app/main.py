@@ -11,6 +11,7 @@ from database.calendar_repository import (
     delete_calendar_event,
     move_unfinished_events_to_next_day,
     normalize_time_spent_strict,
+    update_calendar_event_done,
     update_calendar_event_time_spent,
 )
 from pages import login, inscription, accueil, calendrier, formulaire, profil_eleve, profil_professeur, statistiques, reset_password
@@ -135,6 +136,27 @@ async def api_update_calendar_time_spent(payload: dict = Body(...)):
         raise HTTPException(status_code=400, detail='Format invalide: utilisez min, h, ou h+min (ex: 30 min, 1 h, 1 h 30 min)')
 
     updated = update_calendar_event_time_spent(event_id, user_identifier, time_spent)
+    if not updated:
+        raise HTTPException(status_code=404, detail='Événement introuvable')
+
+    return {'success': True}
+
+
+@app.post('/api/calendar-events/done')
+async def api_update_calendar_done(payload: dict = Body(...)):
+    event_id = int(payload.get('event_id', 0))
+    is_done = bool(payload.get('is_done', False))
+    if event_id <= 0:
+        raise HTTPException(status_code=400, detail='Paramètres invalides')
+
+    if not _is_session_authenticated():
+        raise HTTPException(status_code=401, detail='Session non authentifiée')
+
+    user_identifier = str(app.storage.user.get('email') or '').strip()
+    if not user_identifier:
+        raise HTTPException(status_code=401, detail='Session invalide')
+
+    updated = update_calendar_event_done(event_id, user_identifier, is_done)
     if not updated:
         raise HTTPException(status_code=404, detail='Événement introuvable')
 

@@ -144,5 +144,6 @@ class CalendarEvent(Base):
     exam_duration = Column(String(50), nullable=True)
     time_spent = Column(String(50), nullable=False, default='0 minute')
     target_class = Column(String(50), nullable=True)
+    is_done = Column(Boolean, nullable=False, default=False)
     is_hidden = Column(Boolean, nullable=False, default=False)
     source_event_id = Column(Integer, ForeignKey('calendar_events.id'), nullable=True, index=True)

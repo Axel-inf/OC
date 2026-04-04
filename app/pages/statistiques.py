@@ -11,6 +11,7 @@ from database.calendar_repository import (
 )
 from database.database import get_db
 from database.models import Utilisateur, Eleve, Enseignant, CalendarEvent, RoleEnum
+from utils.school import all_school_classes
 from utils.teacher_assignments import parse_teacher_assignments, subject_from_choice_token
 
 
@@ -77,6 +78,15 @@ def create():
     default_end = available_dates[-1] if available_dates else date.today()
     branch_options = ['Toutes'] + sorted({event.subject for event in available_events})
 
+    class_catalog = all_school_classes()
+    class_lookup = {class_name.lower(): class_name for class_name in class_catalog}
+
+    def normalize_class_name(class_name: str) -> str:
+        raw_value = (class_name or '').strip()
+        if not raw_value:
+            return ''
+        return class_lookup.get(raw_value.lower(), raw_value)
+
     student_class = ''
     teacher_directory: list[dict] = []
     db = get_db()
@@ -85,7 +95,7 @@ def create():
         if current_user is not None:
             student_profile = db.query(Eleve).filter(Eleve.utilisateur_id == current_user.id).first()
             if student_profile is not None:
-                student_class = (student_profile.classe or '').strip()
+                student_class = normalize_class_name(student_profile.classe or '')
 
         teacher_rows = (
             db.query(Enseignant, Utilisateur)
@@ -94,11 +104,20 @@ def create():
         )
         for teacher_profile, teacher_user in teacher_rows:
             assignments_by_class = parse_teacher_assignments(teacher_profile.branches, teacher_profile.classes)
-            teacher_classes = set(assignments_by_class.keys())
-            teacher_by_class_subjects = {
-                class_name: {subject_from_choice_token(token) for token in tokens}
-                for class_name, tokens in assignments_by_class.items()
+            teacher_classes = {
+                normalize_class_name(item)
+                for item in (teacher_profile.classes or '').split(',')
+                if normalize_class_name(item)
             }
+            teacher_by_class_subjects: dict[str, set[str]] = {}
+            for class_name, tokens in assignments_by_class.items():
+                normalized_class_name = normalize_class_name(class_name)
+                if not normalized_class_name:
+                    continue
+                teacher_classes.add(normalized_class_name)
+                teacher_by_class_subjects.setdefault(normalized_class_name, set()).update(
+                    {subject_from_choice_token(token) for token in tokens}
+                )
             teacher_directory.append({
                 'name': f'{teacher_user.prenom} {teacher_user.nom}',
                 'classes': teacher_classes,
@@ -196,6 +215,7 @@ def create():
             return False
 
         def _teachers_for_subject(subject: str) -> list[str]:
+            normalized_subject = (subject or '').strip().lower()
             matching_names: list[str] = []
             for teacher in teacher_directory:
                 if student_class and teacher['classes'] and student_class not in teacher['classes']:
@@ -208,7 +228,8 @@ def create():
                         for values in teacher['by_class_subjects'].values()
                         for item in values
                     }
-                if subject not in class_subjects:
+                lowered_class_subjects = {item.strip().lower() for item in class_subjects}
+                if normalized_subject not in lowered_class_subjects:
                     continue
                 matching_names.append(teacher['name'])
             return sorted(set(matching_names))
@@ -281,7 +302,7 @@ def create():
                     else:
                         teachers = _teachers_for_subject(event.subject)
                         if not teachers:
-                            teachers = ['Non attribué']
+                            continue
 
                     real_share = _duration_to_minutes(event.time_spent) / len(teachers)
                     planned_share = _duration_to_minutes(event.estimated_time) / len(teachers)

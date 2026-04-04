@@ -33,6 +33,20 @@ def _format_day_header(current_date: date) -> str:
     return f"{DAY_NAMES_FR[current_date.weekday()]} {current_date.strftime('%d.%m')}"
 
 
+def _format_target_scope_label(subject: str, target_class: str) -> str:
+    raw_subject = (subject or '').strip()
+    raw_class = (target_class or '').strip()
+
+    if not raw_class:
+        return 'Classe non définie'
+
+    class_level_match = re.match(r'^(\d+)', raw_class)
+    if class_level_match and (raw_subject.startswith('OC ') or raw_subject.startswith('OS ')):
+        return f"{class_level_match.group(1)}ème {raw_subject}"
+
+    return raw_class
+
+
 def _parse_date_from_text(raw_value: str) -> date | None:
     if not raw_value:
         return None
@@ -151,6 +165,7 @@ def _load_events_from_database(user_identifier: str) -> list[dict]:
             'exam_coefficient': event.exam_coefficient,
             'exam_duration': event.exam_duration or '',
             'time_spent': event.time_spent or '0 minute',
+            'is_done': bool(event.is_done),
             'source_event_id': event.source_event_id,
             'target_class': event.target_class or '',
             'date_obj': date_obj,
@@ -331,10 +346,29 @@ def create():
                 }
             }
 
-            window.markCalendarDone = function(id, checkbox) {
+            window.markCalendarDone = async function(id, eventId, checkbox) {
                 const card = document.getElementById(id);
                 if (!card) return;
                 card.classList.toggle('is-completed', checkbox.checked);
+
+                try {
+                    const response = await fetch('/api/calendar-events/done', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            event_id: eventId,
+                            is_done: !!checkbox.checked,
+                        }),
+                    });
+                    if (!response.ok) {
+                        checkbox.checked = !checkbox.checked;
+                        card.classList.toggle('is-completed', checkbox.checked);
+                    }
+                } catch (error) {
+                    checkbox.checked = !checkbox.checked;
+                    card.classList.toggle('is-completed', checkbox.checked);
+                    console.error('Erreur de sauvegarde de la coche', error);
+                }
             }
 
             window.clearTimeSpentInput = function(inputElement) {
@@ -586,6 +620,8 @@ def create():
                                         if event_type == 'examen'
                                         else 'homework-card-container'
                                     )
+                                    if bool(event.get('is_done')):
+                                        card_class += ' is-completed'
                                     event_type_label = 'Examen' if event_type == 'examen' else 'Devoir'
                                     estimated_minutes = _duration_to_minutes(event.get('estimated_time', ''))
 
@@ -634,8 +670,11 @@ def create():
                                                 else ''
                                             )
 
-                                        target_class_value = escape((event.get('target_class', '') or '').strip())
-                                        class_info_html = f'<div class="time-info">Classe concernée : {target_class_value or "Non renseignée"}</div>'
+                                        target_scope_label = _format_target_scope_label(
+                                            event.get('subject', ''),
+                                            event.get('target_class', ''),
+                                        )
+                                        class_info_html = f'<div class="time-info">Classe concernée : {escape(target_scope_label)}</div>'
                                         branch_info_html = f'<div class="time-info">Branche : {subject}</div>'
                                         if event_type == 'examen':
                                             exam_coeff = event.get('exam_coefficient')
@@ -676,12 +715,14 @@ def create():
                                             f'<input type="text" class="time-spent-input" value="{time_spent if time_spent != "0 minute" else "À compléter"}" aria-label="Temps passé" onfocus="clearTimeSpentInput(this)" onblur="updateCalendarTimeSpent({event["id"]}, this)"></div>'
                                         )
                                         if is_shared_event:
+                                            checkbox_checked_attr = ' checked' if bool(event.get('is_done')) else ''
                                             left_actions_html = (
-                                                f'<input type="checkbox" class="task-check" onchange="markCalendarDone(\'{item_id}\', this)">' 
+                                                f'<input type="checkbox" class="task-check"{checkbox_checked_attr} onchange="markCalendarDone(\'{item_id}\', {event["id"]}, this)">' 
                                             )
                                         else:
+                                            checkbox_checked_attr = ' checked' if bool(event.get('is_done')) else ''
                                             left_actions_html = (
-                                                f'<input type="checkbox" class="task-check" onchange="markCalendarDone(\'{item_id}\', this)">' 
+                                                f'<input type="checkbox" class="task-check"{checkbox_checked_attr} onchange="markCalendarDone(\'{item_id}\', {event["id"]}, this)">' 
                                                 f'<button type="button" class="task-delete-button" onclick="window.location.href=\'/formulaire/modifier/{event["id"]}\'" aria-label="Modifier"><span class="task-delete-icon material-icons">edit</span></button>'
                                                 f'<button type="button" class="task-delete-button" onclick="deleteCalendarItem(\'{item_id}\', {event["id"]})" aria-label="Supprimer"><span class="task-delete-icon material-icons">delete</span></button>'
                                             )

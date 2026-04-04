@@ -19,6 +19,23 @@ from utils.school import (
     student_os_options,
 )
 
+
+def _class_level(class_name: str) -> int | None:
+    value = (class_name or '').strip()
+    digits = ''
+    for char in value:
+        if char.isdigit():
+            digits += char
+        else:
+            break
+    if not digits:
+        return None
+    return int(digits)
+
+
+def _is_first_year_class(class_name: str) -> bool:
+    return _class_level(class_name) == 1
+
 def create():
     """Crée la page de profil pour un élève"""
     user_id = app.storage.user.get('user_id')
@@ -227,7 +244,7 @@ def create():
             ).props('outlined').classes('w-full q-mb-md')
             
             # Section Options
-            ui.html('<div class="section-title">Options</div>', sanitize=False)
+            options_section_title = ui.html('<div class="section-title">Options</div>', sanitize=False)
             
             if os_value and os_value not in os_options:
                 os_options = os_options + [os_value]
@@ -246,13 +263,26 @@ def create():
                 value=oc_value
             ).props('outlined').classes('w-full q-mb-md')
             
-            with ui.element('div').classes('two-cols'):
+            options_checkboxes_row = ui.element('div').classes('two-cols')
+            with options_checkboxes_row:
                 basic_english = ui.checkbox('Basic English', value=basic_english_value)
                 bilingue = ui.checkbox('Bilingue', value=bilingue_value)
 
+            def update_options_visibility() -> None:
+                selected_class = (classe_select.value or '').strip()
+                show_options = not _is_first_year_class(selected_class)
+                options_section_title.set_visibility(show_options)
+                os_input.set_visibility(show_options)
+                oc_input.set_visibility(show_options)
+                options_checkboxes_row.set_visibility(show_options)
+
             nom_input.on_value_change(lambda _e: mark_profile_dirty())
             prenom_input.on_value_change(lambda _e: mark_profile_dirty())
-            classe_select.on_value_change(lambda _e: mark_profile_dirty())
+            def on_class_change(_event) -> None:
+                mark_profile_dirty()
+                update_options_visibility()
+
+            classe_select.on_value_change(on_class_change)
             maths_select.on_value_change(lambda _e: mark_profile_dirty())
             langue1.on_value_change(lambda _e: mark_profile_dirty())
             langue2.on_value_change(lambda _e: mark_profile_dirty())
@@ -261,6 +291,7 @@ def create():
             oc_input.on_value_change(lambda _e: mark_profile_dirty())
             basic_english.on_value_change(lambda _e: mark_profile_dirty())
             bilingue.on_value_change(lambda _e: mark_profile_dirty())
+            update_options_visibility()
             
             # Boutons d'action
             with ui.row().classes('w-full gap-4 q-mt-lg'):
@@ -276,6 +307,12 @@ def create():
                         user.nom = (nom_input.value or '').strip() or user.nom
                         user.prenom = (prenom_input.value or '').strip() or user.prenom
                         previous_class = (eleve.classe or '').strip()
+                        previous_langue1 = (eleve.langue1 or '').strip()
+                        previous_langue2 = (eleve.langue2 or '').strip()
+                        previous_langue3 = (eleve.langue3 or '').strip()
+                        previous_os = (eleve.os or '').strip()
+                        previous_oc = (eleve.oc or '').strip()
+                        previous_basic_english = bool(eleve.basic_english)
                         selected_class = (classe_select.value or '').strip()
                         updated_class = selected_class or previous_class
                         # Aide IA: enregistrement du changement de classe dans la BD pour traçabilité historique
@@ -290,14 +327,31 @@ def create():
                         eleve.langue1 = (langue1.value or '').strip() or eleve.langue1
                         eleve.langue2 = (langue2.value or '').strip() or eleve.langue2
                         eleve.langue3 = (langue3.value or '').strip() or eleve.langue3
-                        eleve.os = (os_input.value or '').strip() or eleve.os
-                        eleve.oc = (oc_input.value or '').strip() or eleve.oc
-                        eleve.basic_english = bool(basic_english.value)
-                        eleve.bilingue = bool(bilingue.value)
+
+                        if _is_first_year_class(updated_class):
+                            eleve.os = ''
+                            eleve.oc = ''
+                            eleve.basic_english = False
+                            eleve.bilingue = False
+                        else:
+                            eleve.os = (os_input.value or '').strip() or eleve.os
+                            eleve.oc = (oc_input.value or '').strip() or eleve.oc
+                            eleve.basic_english = bool(basic_english.value)
+                            eleve.bilingue = bool(bilingue.value)
+
+                        sync_needed = any([
+                            updated_class != previous_class,
+                            (eleve.langue1 or '').strip() != previous_langue1,
+                            (eleve.langue2 or '').strip() != previous_langue2,
+                            (eleve.langue3 or '').strip() != previous_langue3,
+                            (eleve.os or '').strip() != previous_os,
+                            (eleve.oc or '').strip() != previous_oc,
+                            bool(eleve.basic_english) != previous_basic_english,
+                        ])
 
                         db.commit()
 
-                        if updated_class and updated_class != previous_class:
+                        if updated_class and sync_needed:
                             try:
                                 hidden_count, created_count = sync_student_calendar_for_class_change(
                                     user_identifier=user.email,
@@ -314,7 +368,7 @@ def create():
                                     type='info',
                                 )
                             except Exception:
-                                ui.notify('Classe mise à jour, mais la synchronisation du calendrier a échoué', type='warning')
+                                ui.notify('Profil mis à jour, mais la synchronisation du calendrier a échoué', type='warning')
 
                         app.storage.user['nom'] = user.nom
                         app.storage.user['prenom'] = user.prenom

@@ -213,6 +213,15 @@ def create():
         with ui.element('div').classes('blue-footer'):
             if role == 'enseignant':
                 with ui.element('div').classes('white-card white-card-link').on(
+                    'click', lambda: ui.navigate.to('/calendrier')
+                ):
+                    ui.label("Accéder à votre calendrier") \
+                        .style('display:block; text-align:center; font-size:16px; font-weight:600; margin-bottom:8px;')
+
+                    ui.icon('calendar_month', size='32px') \
+                        .style('display:block; margin: 0 auto;')
+
+                with ui.element('div').classes('white-card white-card-link').on(
                     'click', lambda: ui.navigate.to('/statistiques')
                 ):
                     ui.label("Consulter les statistiques") \

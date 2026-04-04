@@ -7,7 +7,7 @@ from pages.formulaire import create_date_picker, parse_date_input
 from database.database import get_db
 from database.models import Eleve, Utilisateur, Enseignant
 from database.calendar_repository import list_calendar_events_in_range, list_calendar_events_for_user
-from utils.school import sort_school_classes
+from utils.school import all_school_classes, sort_school_classes
 from utils.teacher_assignments import list_subjects_from_assignments, parse_teacher_assignments
 
 
@@ -38,6 +38,15 @@ def _duration_to_minutes(raw_value: str) -> int:
 
 def create():
     teacher_email = _get_user_identifier()
+    class_catalog = all_school_classes()
+    class_lookup = {class_name.lower(): class_name for class_name in class_catalog}
+
+    def normalize_class_name(class_name: str) -> str:
+        raw_value = (class_name or '').strip()
+        if not raw_value:
+            return ''
+        return class_lookup.get(raw_value.lower(), raw_value)
+
     db = get_db()
     try:
         teacher_user = db.query(Utilisateur).filter(Utilisateur.email == teacher_email).first()
@@ -47,7 +56,16 @@ def create():
             teacher_row = db.query(Enseignant).filter(Enseignant.utilisateur_id == teacher_user.id).first()
             if teacher_row:
                 teacher_assignments_by_class = parse_teacher_assignments(teacher_row.branches, teacher_row.classes)
-                teacher_classes = set(teacher_assignments_by_class.keys())
+                teacher_classes = {
+                    normalize_class_name(item)
+                    for item in (teacher_row.classes or '').split(',')
+                    if normalize_class_name(item)
+                }
+                teacher_classes.update({
+                    normalize_class_name(class_name)
+                    for class_name in teacher_assignments_by_class.keys()
+                    if normalize_class_name(class_name)
+                })
                 teacher_branches = list_subjects_from_assignments(teacher_assignments_by_class)
         teacher_branches = sorted(set(teacher_branches))
 
@@ -61,7 +79,8 @@ def create():
 
     class_to_students: dict[str, list[dict]] = {}
     for student, user in teacher_row:
-        if teacher_classes and student.classe not in teacher_classes:
+        normalized_student_class = normalize_class_name(student.classe or '')
+        if teacher_classes and normalized_student_class not in teacher_classes:
             continue
         student_item = {
             'email': user.email,
@@ -69,7 +88,7 @@ def create():
             'prenom': user.prenom,
             'profile': student,
         }
-        class_to_students.setdefault(student.classe, []).append(student_item)
+        class_to_students.setdefault(normalized_student_class, []).append(student_item)
 
     class_options = sort_school_classes(sorted(set(class_to_students.keys()) | teacher_classes))
     default_class = class_options[0] if class_options else ''

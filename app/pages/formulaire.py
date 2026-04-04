@@ -7,8 +7,13 @@ import calendar
 from database.calendar_repository import create_calendar_event, get_calendar_event_for_user, update_calendar_event
 from database.database import get_db
 from database.models import Utilisateur, Enseignant, Eleve
-from utils.school import all_teaching_subjects, sort_school_classes
-from utils.teacher_assignments import parse_teacher_assignments, split_choice_token, token_to_label
+from utils.school import all_school_classes, sort_school_classes
+from utils.teacher_assignments import (
+    build_subject_options_for_class,
+    parse_teacher_assignments,
+    split_choice_token,
+    token_to_label,
+)
 
 
 MONTH_NAMES_FR = [
@@ -227,6 +232,15 @@ def create(edit_event_id: int | None = None):
         or str(app.storage.user.get('user_id') or '')
         or 'anonymous'
     )
+    class_catalog = all_school_classes()
+    class_lookup = {class_name.lower(): class_name for class_name in class_catalog}
+
+    def normalize_class_name(class_name: str) -> str:
+        raw_value = (class_name or '').strip()
+        if not raw_value:
+            return ''
+        return class_lookup.get(raw_value.lower(), raw_value)
+
     edit_event: dict | None = None
     if edit_event_id is not None:
         db_event = get_calendar_event_for_user(edit_event_id, user_identifier)
@@ -360,9 +374,10 @@ def create(edit_event_id: int | None = None):
     ''')
     
     role = app.storage.user.get('role')
-    teaching_subjects = all_teaching_subjects()
     teacher_assignments_by_class: dict[str, list[str]] = {}
     class_to_students: dict[str, list[dict]] = {}
+    student_allowed_subjects: list[str] = []
+    student_allowed_subjects_set: set[str] = set()
     if role == 'enseignant':
         user_email = app.storage.user.get('email')
         db = get_db()
@@ -371,7 +386,12 @@ def create(edit_event_id: int | None = None):
             if teacher_user is not None:
                 teacher_profile = db.query(Enseignant).filter(Enseignant.utilisateur_id == teacher_user.id).first()
                 if teacher_profile is not None:
-                    teacher_assignments_by_class = parse_teacher_assignments(teacher_profile.branches, teacher_profile.classes)
+                    raw_assignments_by_class = parse_teacher_assignments(teacher_profile.branches, teacher_profile.classes)
+                    for class_name, tokens in raw_assignments_by_class.items():
+                        normalized_class_name = normalize_class_name(class_name)
+                        if not normalized_class_name:
+                            continue
+                        teacher_assignments_by_class.setdefault(normalized_class_name, []).extend(tokens)
 
             all_students = (
                 db.query(Eleve, Utilisateur)
@@ -379,11 +399,30 @@ def create(edit_event_id: int | None = None):
                 .all()
             )
             for student, user in all_students:
+                normalized_student_class = normalize_class_name(student.classe or '')
                 student_item = {
                     'email': user.email,
                     'profile': student,
                 }
-                class_to_students.setdefault(student.classe, []).append(student_item)
+                class_to_students.setdefault(normalized_student_class, []).append(student_item)
+        finally:
+            db.close()
+    else:
+        db = get_db()
+        try:
+            student_user = db.query(Utilisateur).filter(Utilisateur.email == user_identifier).first()
+            if student_user is not None:
+                student_profile = db.query(Eleve).filter(Eleve.utilisateur_id == student_user.id).first()
+                if student_profile is not None:
+                    student_class = (student_profile.classe or '').strip()
+                    option_tokens = build_subject_options_for_class(student_class).keys() if student_class else []
+                    student_allowed_subjects_set = {
+                        subject
+                        for token in option_tokens
+                        for subject, track in [split_choice_token(token)]
+                        if track == 'standard' and subject
+                    }
+                    student_allowed_subjects = sorted(student_allowed_subjects_set)
         finally:
             db.close()
 
@@ -547,10 +586,16 @@ def create(edit_event_id: int | None = None):
                         branche.on_value_change(lambda _: refresh_teacher_target_selector())
                         refresh_teacher_target_selector()
                     else:
+                        edit_subject = (edit_event.get('subject', '') if edit_event else '').strip()
+                        student_subject_choices = list(student_allowed_subjects)
+                        if edit_subject and edit_subject not in student_subject_choices:
+                            student_subject_choices.append(edit_subject)
+                            student_subject_choices = sorted(student_subject_choices)
+
                         branche = ui.select(
-                            teaching_subjects,
+                            student_subject_choices,
                             label='Branche',
-                            value=(edit_event.get('subject', '') if edit_event else None),
+                            value=(edit_subject or (student_subject_choices[0] if student_subject_choices else None)),
                         ).props('outlined').classes('w-full q-mb-md')
                     
                     description = ui.textarea(
@@ -779,6 +824,10 @@ def create(edit_event_id: int | None = None):
                                     type='positive',
                                 )
                         else:
+                            if branche_value not in student_allowed_subjects_set:
+                                ui.notify('Cette branche n\'est pas autorisée pour votre classe', type='negative')
+                                return
+
                             if is_edit_mode:
                                 # Aide IA: propager les mises à jour des devoirs à tous les élèves de la classe
                                 student_current_class = None

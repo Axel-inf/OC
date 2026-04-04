@@ -189,14 +189,125 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 
 ---
 
+### 13. Règles pédagogiques par année (enseignants/élèves)
+- **Fichier** : [app/utils/teacher_assignments.py](app/utils/teacher_assignments.py)
+- **Ligne** : 50+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour appliquer les branches autorisées selon l'année
+- **Détail** : 1ère sans OS/OC, 2ème avec OS, 3ème/4ème avec OS+OC+philosophie selon les règles définies
+
+- **Fichier** : [app/pages/profil_professeur.py](app/pages/profil_professeur.py)
+- **Ligne** : 250+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour rendre l'UI des branches cohérente avec les règles par classe
+- **Détail** : affichage conditionnel OS/OC, validation par classe et correction des faux négatifs de sélection
+
+- **Fichier** : [app/pages/formulaire.py](app/pages/formulaire.py)
+- **Ligne** : 374+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour restreindre les matières élève selon la classe
+- **Détail** : blocage des matières non autorisées côté UI et côté validation serveur
+
+---
+
+### 14. Robustesse des classes (normalisation casse) et propagation transverse
+- **Fichier** : [app/pages/profil_professeur.py](app/pages/profil_professeur.py)
+- **Ligne** : 33+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour normaliser les codes classes (`2gy1`/`2GY1`)
+- **Détail** : pré-cochage fiable des classes et stockage cohérent des sélections
+
+- **Fichier** : [app/pages/statistiques.py](app/pages/statistiques.py)
+- **Ligne** : 78+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour attribution professeur robuste
+- **Détail** : matching classes/matières insensible à la casse et suppression du bucket `Non attribué`
+
+- **Fichier** : [app/pages/charge_eleve.py](app/pages/charge_eleve.py)
+- **Ligne** : 38+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour prise en compte des classes prof mises à jour
+- **Détail** : filtrage élèves/classes robuste après modifications du profil enseignant
+
+---
+
+### 15. Persistance de l'état "fait" des devoirs
+- **Fichier** : [app/database/models.py](app/database/models.py)
+- **Ligne** : 146
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour ajout du champ `is_done` sur les événements calendrier
+- **Détail** : persistance base de données de la coche "devoir fait"
+
+- **Fichier** : [app/database/database.py](app/database/database.py)
+- **Ligne** : 29+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour migration légère de la colonne `is_done`
+- **Détail** : ajout automatique de la colonne si absente
+
+- **Fichier** : [app/main.py](app/main.py)
+- **Ligne** : 142+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour API de persistance de la coche
+- **Détail** : endpoint sécurisé `/api/calendar-events/done`
+
+- **Fichier** : [app/pages/calendrier.py](app/pages/calendrier.py)
+- **Ligne** : 349+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour branchement UI ↔ API de l'état "fait"
+- **Détail** : restauration de la coche au chargement et sauvegarde au clic
+
+---
+
+### 16. Synchronisation avancée du calendrier lors des changements de profil
+- **Fichier** : [app/database/calendar_repository.py](app/database/calendar_repository.py)
+- **Ligne** : 1+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour synchronisation fiable des événements liés (classe/options)
+- **Détail** : normalisation des classes, dédoublonnage par source, règles OS/OC par niveau, et maintien des événements partagés après redémarrage
+
+- **Fichier** : [app/pages/profil_eleve.py](app/pages/profil_eleve.py)
+- **Ligne** : 281+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour déclencher la synchronisation aussi sur changement d'options
+- **Détail** : synchro non limitée au changement de classe (langues, OS, OC, Basic English)
+
+- **Fichier** : [app/pages/profil_eleve.py](app/pages/profil_eleve.py)
+- **Ligne** : 1+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour masquer les options en 1ère année
+- **Détail** : section options cachée en 1ère et nettoyage des valeurs OS/OC/flags à la sauvegarde
+
+---
+
+### 17. Ajustements UX et navigation
+- **Fichier** : [app/pages/accueil.py](app/pages/accueil.py)
+- **Ligne** : 210+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour ajouter l'accès calendrier côté enseignant
+- **Détail** : carte dédiée vers `/calendrier` sur l'accueil professeur
+
+- **Fichier** : [app/pages/calendrier.py](app/pages/calendrier.py)
+- **Ligne** : 30+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour clarifier "Classe concernée"
+- **Détail** : affichage explicite (classe réelle, ou libellé option par niveau, ou "Classe non définie")
+
+- **Fichier** : [app/pages/profil_professeur.py](app/pages/profil_professeur.py)
+- **Ligne** : 430+
+- **Date** : 04.04.2026
+- **Description** : Aide IA pour retrait d'une classe professeur
+- **Détail** : masquage des devoirs source et événements liés des classes retirées
+
+---
+
 
 
 
 ## Statistiques
-- **Nombre total d'utilisations d'IA documentées** : ~24 références
-- **Fichiers concernés** : 9
+- **Nombre total d'utilisations d'IA documentées** : ~45 références
+- **Fichiers concernés** : 12
 - **Domaines** : Backend sécurité, Modèles de données, Synchronisation calendrier, Frontend UI
-- **Période** : 15.01.2026 - 01.04.2026
+- **Période** : 15.01.2026 - 04.04.2026
 
 ---
 
@@ -210,6 +321,7 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 | **19.02.2026** | Sécurité API et suppression serveur | `main.py`, `calendrier.py` |
 | **26.02.2026** | Synchronisation complète + sécurité complete + migrations | `database.py`, `calendar_repository.py`, `models.py`, `main.py`, `calendrier.py` |
 | **01.04.2026** | Synchronisation élève-classe, validation stricte du temps passé, anti-doublons | `calendrier.py`, `calendar_repository.py`, `main.py`, `formulaire.py`, `profil_eleve.py` |
+| **04.04.2026** | Règles pédagogiques par année, robustesse classes (casse), persistance coche "fait", suppression de `Non attribué`, sync options/OS/OC, UX accueil/calendrier | `teacher_assignments.py`, `profil_professeur.py`, `formulaire.py`, `statistiques.py`, `charge_eleve.py`, `models.py`, `database.py`, `main.py`, `calendrier.py`, `calendar_repository.py`, `profil_eleve.py`, `accueil.py` |
 
 ---
 

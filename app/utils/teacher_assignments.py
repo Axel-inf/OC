@@ -47,16 +47,23 @@ def _standard_subjects_for_teacher() -> list[str]:
     return sorted({subject for subject in standard_subjects() if subject})
 
 
+def _base_subjects_for_teacher() -> set[str]:
+    excluded_subjects = {'Chimie', 'Biologie', 'Géographie'}
+    return {subject for subject in _standard_subjects_for_teacher() if subject not in excluded_subjects}
+
+
 def _available_subjects_for_class(class_name: str) -> list[str]:
     level = _extract_class_level(class_name)
-    base = set(_standard_subjects_for_teacher()) | {'Basic English'}
+    base = _base_subjects_for_teacher() | {'Basic English'}
 
     if level == 1:
-        subjects = base
+        subjects = base | {'Chimie', 'Biologie', 'Géographie', 'Économie et droit', 'Sciences religieuses'}
     elif level == 2:
-        subjects = base | set(os_subjects())
+        subjects = base | {'Chimie', 'Biologie', 'Géographie'} | set(os_subjects())
+    elif level in {3, 4}:
+        subjects = base | {'Philosophie'} | set(os_subjects()) | set(oc_subjects())
     else:
-        subjects = base | set(os_subjects()) | set(oc_subjects())
+        subjects = base | {'Chimie', 'Biologie', 'Géographie'} | set(os_subjects()) | set(oc_subjects())
 
     return sorted(subjects)
 

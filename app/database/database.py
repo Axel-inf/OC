@@ -28,6 +28,8 @@ def _ensure_calendar_event_columns() -> None:
             connection.execute(text('ALTER TABLE calendar_events ADD COLUMN source_event_id INTEGER'))
         if 'target_class' not in columns:
             connection.execute(text('ALTER TABLE calendar_events ADD COLUMN target_class VARCHAR(50)'))
+        if 'is_done' not in columns:
+            connection.execute(text('ALTER TABLE calendar_events ADD COLUMN is_done BOOLEAN NOT NULL DEFAULT 0'))
         if 'exam_coefficient' not in columns:
             connection.execute(text('ALTER TABLE calendar_events ADD COLUMN exam_coefficient FLOAT'))
         if 'exam_duration' not in columns:

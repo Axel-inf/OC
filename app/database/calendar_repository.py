@@ -2,7 +2,24 @@ from datetime import date, timedelta
 import re
 from database.database import get_db
 from database.models import CalendarEvent, RoleEnum, Utilisateur, Enseignant
+from utils.school import all_school_classes
 from utils.teacher_assignments import parse_teacher_assignments, subject_from_choice_token
+
+
+_CLASS_LOOKUP = {class_name.lower(): class_name for class_name in all_school_classes()}
+
+
+def _normalize_class_name(class_name: str | None) -> str:
+    raw_value = (class_name or '').strip()
+    if not raw_value:
+        return ''
+    return _CLASS_LOOKUP.get(raw_value.lower(), raw_value)
+
+
+def _class_level(class_name: str | None) -> str:
+    raw_value = _normalize_class_name(class_name)
+    match = re.match(r'^(\d+)', raw_value)
+    return match.group(1) if match else ''
 
 
 def _student_has_subject_for_sync(
@@ -63,7 +80,7 @@ def sync_student_calendar_for_class_change(
         (hidden_count, created_count)
     """
     # Aide IA: synchronisation automatique des événements liés lors d'un changement de classe
-    normalized_class = (new_class or '').strip()
+    normalized_class = _normalize_class_name(new_class)
     if not user_identifier or not normalized_class:
         return (0, 0)
 
@@ -78,41 +95,67 @@ def sync_student_calendar_for_class_change(
             .filter(
                 CalendarEvent.user_identifier == user_identifier,
                 CalendarEvent.is_hidden.is_(False),
-                (
-                    (CalendarEvent.target_class.isnot(None) & (CalendarEvent.target_class != normalized_class))
-                    | (CalendarEvent.source_event_id.isnot(None) & CalendarEvent.target_class.is_(None))
-                ),
             )
             .all()
         )
         for stale_event in stale_events:
-            stale_event.is_hidden = True
-            hidden_count += 1
-
-        existing_source_ids = {
-            source_id
-            for (source_id,) in (
-                db.query(CalendarEvent.source_event_id)
-                .filter(
-                    CalendarEvent.user_identifier == user_identifier,
-                    CalendarEvent.is_hidden.is_(False),
-                    CalendarEvent.source_event_id.isnot(None),
-                    CalendarEvent.target_class == normalized_class,
-                )
-                .all()
+            event_target_class = _normalize_class_name(stale_event.target_class)
+            should_hide = (
+                (bool(event_target_class) and event_target_class != normalized_class)
+                or (stale_event.source_event_id is not None and not event_target_class)
             )
-            if source_id is not None
-        }
+            if should_hide:
+                stale_event.is_hidden = True
+                hidden_count += 1
 
-        class_source_events = (
+        linked_events_for_user = (
+            db.query(CalendarEvent)
+            .filter(
+                CalendarEvent.user_identifier == user_identifier,
+                CalendarEvent.source_event_id.isnot(None),
+            )
+            .all()
+        )
+
+        linked_events_by_source: dict[int, list[CalendarEvent]] = {}
+        for linked_event in linked_events_for_user:
+            if linked_event.source_event_id is None:
+                continue
+            linked_events_by_source.setdefault(int(linked_event.source_event_id), []).append(linked_event)
+
+        # Aide IA: conserver un seul événement lié par source (et masquer les doublons historiques).
+        linked_event_index: dict[int, CalendarEvent] = {}
+        for source_id, events in linked_events_by_source.items():
+            preferred_event = next((event for event in events if not bool(event.is_hidden)), events[0])
+            linked_event_index[source_id] = preferred_event
+            for duplicate_event in events:
+                if duplicate_event.id != preferred_event.id and not bool(duplicate_event.is_hidden):
+                    duplicate_event.is_hidden = True
+                    hidden_count += 1
+
+        all_class_source_events = (
             db.query(CalendarEvent)
             .filter(
                 CalendarEvent.is_hidden.is_(False),
                 CalendarEvent.source_event_id.is_(None),
-                CalendarEvent.target_class == normalized_class,
+                CalendarEvent.target_class.isnot(None),
             )
             .all()
         )
+        target_level = _class_level(normalized_class)
+        class_source_events = []
+        for event in all_class_source_events:
+            event_target_class = _normalize_class_name(event.target_class)
+            event_subject = (event.subject or '').strip()
+            if event_target_class == normalized_class:
+                class_source_events.append(event)
+                continue
+
+            # Aide IA: pour OS/OC, on applique la portée au niveau (2ème, 3ème, ...)
+            # afin que l'élève ayant l'option voie le devoir même si la classe diffère.
+            if (event_subject.startswith('OS ') or event_subject.startswith('OC ')) and target_level:
+                if _class_level(event_target_class) == target_level:
+                    class_source_events.append(event)
 
         teacher_global_events = (
             db.query(CalendarEvent)
@@ -144,7 +187,11 @@ def sync_student_calendar_for_class_change(
                 teacher_assignments_cache[teacher_user_id] = assignments
 
             assignments = teacher_assignments_cache.get(teacher_user_id, {})
-            class_tokens = assignments.get(normalized_class, [])
+            class_tokens: list[str] = []
+            normalized_target = _normalize_class_name(normalized_class)
+            for class_name, tokens in assignments.items():
+                if _normalize_class_name(class_name) == normalized_target:
+                    class_tokens.extend(tokens)
             class_subjects = {subject_from_choice_token(token) for token in class_tokens}
             return (subject or '').strip() in class_subjects
 
@@ -159,7 +206,15 @@ def sync_student_calendar_for_class_change(
             if (source_event.user_identifier or '').strip() == user_identifier:
                 continue
 
-            if source_event.id in existing_source_ids:
+            if not _student_has_subject_for_sync(
+                source_event.subject,
+                langue1=langue1,
+                langue2=langue2,
+                langue3=langue3,
+                os_value=os_value,
+                oc_value=oc_value,
+                basic_english=basic_english,
+            ):
                 continue
 
             event_target_class = (source_event.target_class or '').strip()
@@ -174,6 +229,23 @@ def sync_student_calendar_for_class_change(
                     source_event.subject,
                 ):
                     continue
+
+            existing_linked_event = linked_event_index.get(int(source_event.id))
+            if existing_linked_event is not None:
+                was_hidden = bool(existing_linked_event.is_hidden)
+                existing_linked_event.event_type = source_event.event_type
+                existing_linked_event.subject = source_event.subject
+                existing_linked_event.title = source_event.title
+                existing_linked_event.description = source_event.description
+                existing_linked_event.date_iso = source_event.date_iso
+                existing_linked_event.estimated_time = source_event.estimated_time
+                existing_linked_event.exam_coefficient = source_event.exam_coefficient
+                existing_linked_event.exam_duration = source_event.exam_duration
+                existing_linked_event.target_class = normalized_class
+                existing_linked_event.is_hidden = False
+                if was_hidden:
+                    created_count += 1
+                continue
 
             db.add(CalendarEvent(
                 user_identifier=user_identifier,
@@ -302,6 +374,7 @@ def create_calendar_event(
     time_spent: str = '0 minute',
     source_event_id: int | None = None,
     target_class: str | None = None,
+    is_done: bool = False,
 ) -> int:
     # Aide IA: extension des événements calendrier avec classe cible + métadonnées d'examen
     db = get_db()
@@ -317,7 +390,8 @@ def create_calendar_event(
             exam_coefficient=exam_coefficient,
             exam_duration=(exam_duration or '').strip() or None,
             time_spent=time_spent,
-            target_class=(target_class or '').strip() or None,
+            target_class=_normalize_class_name(target_class) or None,
+            is_done=bool(is_done),
             is_hidden=False,
             source_event_id=source_event_id,
         )
@@ -377,6 +451,27 @@ def update_calendar_event_time_spent(event_id: int, user_identifier: str, time_s
             return False
 
         event.time_spent = time_spent
+        db.commit()
+        return True
+    finally:
+        db.close()
+
+
+def update_calendar_event_done(event_id: int, user_identifier: str, is_done: bool) -> bool:
+    db = get_db()
+    try:
+        event = (
+            db.query(CalendarEvent)
+            .filter(
+                CalendarEvent.id == event_id,
+                CalendarEvent.user_identifier == user_identifier,
+            )
+            .first()
+        )
+        if event is None:
+            return False
+
+        event.is_done = bool(is_done)
         db.commit()
         return True
     finally:
@@ -476,7 +571,7 @@ def update_calendar_event(
         event.estimated_time = estimated_time
         event.exam_coefficient = exam_coefficient
         event.exam_duration = (exam_duration or '').strip() or None
-        event.target_class = (target_class or '').strip() or None
+        event.target_class = _normalize_class_name(target_class) or None
         db.commit()
 
         if propagate_to_linked:
@@ -497,7 +592,7 @@ def update_calendar_event(
                 linked_event.estimated_time = estimated_time
                 linked_event.exam_coefficient = exam_coefficient
                 linked_event.exam_duration = (exam_duration or '').strip() or None
-                linked_event.target_class = (target_class or '').strip() or None
+                linked_event.target_class = _normalize_class_name(target_class) or None
             db.commit()
 
         return True
