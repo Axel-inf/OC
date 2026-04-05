@@ -26,6 +26,10 @@ def is_valid_email(email: str) -> bool:
     local_part, _, domain_part = email.partition('@')
     return bool(local_part and domain_part and '.' in domain_part and not domain_part.startswith('.') and not domain_part.endswith('.'))
 
+
+def is_first_year_class(class_name: str) -> bool:
+    return (class_name or '').strip().startswith('1')
+
 def create():
     """Crée la page d'inscription"""
     ui.timer(0.05, lambda: ui.run_javascript('window.scrollTo(0, 0);'), once=True)
@@ -202,7 +206,7 @@ def create():
                     value='Espagnol'
                 ).props('outlined').classes('w-full q-mb-md')
 
-                ui.html('<div class="section-title">Options</div>', sanitize=False)
+                options_section_title = ui.html('<div class="section-title">Options</div>', sanitize=False)
 
                 student_fields['os'] = ui.select(
                     os_options,
@@ -216,9 +220,28 @@ def create():
                     value='Physique'
                 ).props('outlined').classes('w-full q-mb-md')
 
-                with ui.element('div').classes('two-cols'):
+                options_checkboxes_row = ui.element('div').classes('two-cols')
+                with options_checkboxes_row:
                     student_fields['basic_english'] = ui.checkbox('Basic English')
                     student_fields['bilingue'] = ui.checkbox('Bilingue')
+
+                def update_student_options_visibility() -> None:
+                    show_options = not is_first_year_class(student_fields['classe'].value or '')
+                    options_section_title.set_visibility(show_options)
+                    student_fields['os'].set_visibility(show_options)
+                    student_fields['oc'].set_visibility(show_options)
+                    options_checkboxes_row.set_visibility(show_options)
+                    if not show_options:
+                        student_fields['os'].value = None
+                        student_fields['oc'].value = None
+                        student_fields['basic_english'].value = False
+                        student_fields['bilingue'].value = False
+                    elif student_fields['os'].value is None:
+                        student_fields['os'].value = 'Physique et application des mathématiques'
+                        student_fields['oc'].value = 'Physique'
+
+                student_fields['classe'].on_value_change(lambda _event: update_student_options_visibility())
+                update_student_options_visibility()
             
             def create_teacher_fields():
                 """Crée les champs spécifiques aux enseignants"""

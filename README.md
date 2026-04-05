@@ -58,6 +58,8 @@ SMTP_FROM_EMAIL=votre.adresse@gmail.com
 
 `SEED_DEMO_DATA_ON_STARTUP=False` garde les données entre redémarrages. Mettez `True` seulement pour réinitialiser et repeupler les données de démonstration au démarrage.
 
+Pour une première prise en main sur une machine inconnue, le plus simple est de mettre temporairement `SEED_DEMO_DATA_ON_STARTUP=True` au premier lancement. L'application créera alors une base avec des comptes de démonstration et des devoirs/examens déjà enregistrés. Vous pourrez ensuite remettre la valeur à `False` pour conserver vos données lors des prochains redémarrages.
+
 ### Configuration Gmail (obligatoire pour l'envoi d'email)
 
 1. Activez la validation en 2 étapes sur votre compte Google.
@@ -71,13 +73,34 @@ SMTP_FROM_EMAIL=votre.adresse@gmail.com
 python -c "from database.database import init_database; init_database()"
 ```
 
+Cette étape est optionnelle si vous lancez directement `python main.py`, car le démarrage de l'application initialise déjà la base de données automatiquement.
+
 ## 🎯 Lancement de l'application
 
 ```bash
 python main.py
 ```
 
-L'application sera accessible sur : **http://localhost:8080**
+L'application sera accessible sur : [http://localhost:8080](http://localhost:8080)
+
+En local, l'URL utilise `http` (sans `s`) par défaut. `https` nécessite une configuration TLS/certificat supplémentaire.
+
+## 🔐 Comptes de démonstration
+
+La base de données de démonstration contient déjà des comptes de professeurs et d'élèves, ainsi que des événements de test. Cela permet de se connecter immédiatement sans devoir créer manuellement les premiers comptes.
+
+Dans la version actuelle du seed, les identifiants sont les suivants :
+
+- Professeurs : `0@example.com` à `9@example.com`
+- Élèves : `a@example.com` à `z@example.com`
+- Mot de passe pour tous les comptes de démonstration : `12345678`
+
+Exemples de connexion rapides :
+
+- Professeur : `1@example.com` / `12345678`
+- Élève : `a@example.com` / `12345678`
+
+Si vous recevez une version du projet où les comptes de démonstration sont numérotés différemment, gardez la même logique : ouvrez la page de connexion, saisissez l'email correspondant au compte existant, puis utilisez le mot de passe de démonstration indiqué dans le seed.
 
 ## � Documentation
 
@@ -109,42 +132,48 @@ Puis ouvrez `docs/build/html/index.html` dans votre navigateur.
 ```
 planification_devoirs/
 │
-├── main.py                      # Point d'entrée
-├── requirements.txt             # Dépendances
-├── .env                         # Configuration (à créer)
-│
-├── config/
-│   └── settings.py             # Paramètres de l'app
-│
-├── database/
-│   ├── models.py               # Modèles SQLAlchemy
-│   ├── database.py             # Connexion BD
-│   └── init_db.py              # Init BD
-│
-├── pages/
-│   ├── login.py                # Connexion
-│   ├── inscription.py          # Inscription
-│   ├── accueil.py              # Accueil
-│   ├── calendrier.py           # Calendrier
-│   ├── formulaire.py           # Ajout devoir/examen
-│   ├── profil_eleve.py         # Profil élève
-│   ├── profil_professeur.py   # Profil professeur
-│   └── statistiques.py         # Statistiques
-│
-├── components/
-│   ├── navbar.py               # Barre de navigation
-│   ├── header.py               # En-tête
-│   └── cards.py                # Composants réutilisables
-│
-├── utils/
-│   ├── auth.py                 # Authentification
-│   ├── validators.py           # Validation
-│   └── date_helpers.py         # Utilitaires dates
-│
-└── static/
-    ├── css/
-    ├── images/
-    └── js/
+├── run.py                         # Point d'entrée racine
+├── README.md
+├── AI_USAGE.md
+├── app/
+│   ├── main.py                    # Application NiceGUI
+│   ├── requirements.txt           # Dépendances Python
+│   ├── config/
+│   │   └── settings.py            # Paramètres de l'app
+│   ├── components/
+│   │   ├── navbar.py              # Barre de navigation
+│   │   ├── header.py              # En-tête
+│   │   └── cards.py               # Composants réutilisables
+│   ├── database/
+│   │   ├── database.py            # Connexion BD + init
+│   │   ├── models.py              # Modèles SQLAlchemy
+│   │   ├── calendar_repository.py # Accès événements calendrier
+│   │   ├── init_db.py             # Script d'initialisation BD
+│   │   └── seed_demo_data.py      # Données de démonstration
+│   ├── pages/
+│   │   ├── login.py
+│   │   ├── inscription.py
+│   │   ├── accueil.py
+│   │   ├── calendrier.py
+│   │   ├── formulaire.py
+│   │   ├── charge_eleve.py
+│   │   ├── profil_eleve.py
+│   │   ├── profil_professeur.py
+│   │   ├── reset_password.py
+│   │   └── statistiques.py
+│   ├── utils/
+│   │   ├── auth.py
+│   │   ├── date_helpers.py
+│   │   ├── school.py
+│   │   ├── teacher_assignments.py
+│   │   └── validators.py
+│   ├── static/
+│   │   ├── css/
+│   │   ├── images/
+│   │   └── js/
+│   ├── templates/
+│   └── tests/
+└── docs/                          # Documentation Sphinx
 ```
 
 ## 🎨 Fonctionnalités implémentées
@@ -200,7 +229,18 @@ planification_devoirs/
 
 ## 📝 Utilisation
 
-### Compte de test (à créer via inscription)
+### Connexion avec un compte existant
+
+Si vous avez activé les données de démonstration, vous pouvez vous connecter directement avec un compte déjà présent en base au lieu de créer un nouvel utilisateur.
+
+1. Ouvrez la page de connexion.
+2. Saisissez l'email d'un compte de démonstration.
+3. Entrez le mot de passe `12345678`.
+4. Connectez-vous et vous accédez à un profil qui possède déjà des devoirs et examens de test.
+
+### Création d'un nouveau compte
+
+Si vous voulez créer votre propre utilisateur, choisissez le rôle correspondant lors de l'inscription :
 
 **Élève :**
 - Sélectionner "Élève" lors de l'inscription

@@ -608,7 +608,7 @@ def create(edit_event_id: int | None = None):
                         date_rendu = create_date_picker('Date de rendu', prefill_date)
                         
                         temps_estime = ui.input(
-                            'Temps de révision estimé',
+                            'Temps passé',
                             placeholder='Ex: 1h30',
                             value=(edit_event.get('estimated_time', '') if edit_event and edit_event.get('type') == 'devoir' else ''),
                         ).props('outlined').classes('w-full q-mb-md')
@@ -624,18 +624,17 @@ def create(edit_event_id: int | None = None):
                         ).props('outlined').classes('w-full q-mb-md')
                         coefficient_input = None
                         duree_evaluation_input = None
-                        if role == 'enseignant':
-                            coefficient_input = ui.input(
-                                'Coefficient',
-                                placeholder='Ex: 2',
-                                value=(str(edit_event.get('exam_coefficient')) if edit_event and edit_event.get('type') == 'examen' and edit_event.get('exam_coefficient') is not None else ''),
-                            ).props('outlined').classes('w-full q-mb-md')
+                        coefficient_input = ui.input(
+                            'Coefficient',
+                            placeholder='Ex: 2',
+                            value=(str(edit_event.get('exam_coefficient')) if edit_event and edit_event.get('type') == 'examen' and edit_event.get('exam_coefficient') is not None else ''),
+                        ).props('outlined').classes('w-full q-mb-md')
 
-                            duree_evaluation_input = ui.input(
-                                'Durée de l\'évaluation',
-                                placeholder='Ex: 45 min, 1h30',
-                                value=(edit_event.get('exam_duration', '') if edit_event and edit_event.get('type') == 'examen' else ''),
-                            ).props('outlined').classes('w-full q-mb-md')
+                        duree_evaluation_input = ui.input(
+                            'Durée de l\'évaluation',
+                            placeholder='Ex: 45 min, 1h30',
+                            value=(edit_event.get('exam_duration', '') if edit_event and edit_event.get('type') == 'examen' else ''),
+                        ).props('outlined').classes('w-full q-mb-md')
                     
                     # Bouton d'enregistrement
                     async def handle_submit():
@@ -655,10 +654,9 @@ def create(edit_event_id: int | None = None):
                             coefficient_raw_value = ((coefficient_input.value if coefficient_input is not None else '') or '').strip()
                             evaluation_duration_raw_value = ((duree_evaluation_input.value if duree_evaluation_input is not None else '') or '').strip()
 
-                            if role == 'enseignant':
-                                if not coefficient_raw_value or not evaluation_duration_raw_value:
-                                    ui.notify('Merci de renseigner coefficient et durée de l\'évaluation', type='negative')
-                                    return
+                            if not coefficient_raw_value or not evaluation_duration_raw_value:
+                                ui.notify('Merci de renseigner coefficient et durée de l\'évaluation', type='negative')
+                                return
 
                             try:
                                 coefficient_value = float(coefficient_raw_value) if coefficient_raw_value else None

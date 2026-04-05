@@ -2,6 +2,8 @@
 
 Ce document liste toutes les utilisations d'IA générative détectées dans le projet, selon les consignes du cours.
 
+Dernière mise à jour du registre : 05.04.2026
+
 ## Format de documentation
 Chaque utilisation d'IA générative est documentée directement dans le code source avec le format suivant :
 ```python
@@ -53,13 +55,13 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 - **Description** : Aide de l'IA (document global)
 
 - **Fichier** : [app/main.py](app/main.py)
-- **Ligne** : 77
+- **Ligne** : 79
 - **Date** : 26.02.2026
 - **Description** : Aide IA pour sécurisation de la suppression via identité de session
 - **Détail** : Vérification que l'utilisateur supprime uniquement ses propres événements (pas d'identifiant client)
 
 - **Fichier** : [app/main.py](app/main.py)
-- **Ligne** : 119
+- **Ligne** : 121
 - **Date** : 26.02.2026
 - **Description** : Aide IA pour sécurisation de la mise à jour du temps passé via identité de session
 - **Détail** : Validation serveur du temps passé avec authentification de session
@@ -68,19 +70,19 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 
 ### 5. Calendrier - Synchronisation et données
 - **Fichier** : [app/database/calendar_repository.py](app/database/calendar_repository.py)
-- **Ligne** : 65
+- **Ligne** : 82
 - **Date** : 26.02.2026
 - **Description** : Aide IA pour synchronisation automatique des événements liés lors d'un changement de classe
 - **Détail** : Mise à jour automatique des événements quand un élève change de classe
 
 - **Fichier** : [app/database/calendar_repository.py](app/database/calendar_repository.py)
-- **Ligne** : 286
+- **Ligne** : 379
 - **Date** : 23.02.2026
 - **Description** : Aide IA pour extension des événements calendrier avec classe cible + métadonnées d'examen
 - **Détail** : Enrichissement des données calendrier pour affichage détaillé
 
 - **Fichier** : [app/database/calendar_repository.py](app/database/calendar_repository.py)
-- **Ligne** : 397
+- **Ligne** : 551
 - **Date** : 26.02.2026
 - **Description** : Aide IA pour propagation des modifications vers événements liés (élèves)
 - **Détail** : Synchronisation bidirectionnelle prof ↔ élèves
@@ -94,30 +96,30 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 - **Description** : Aide de l'IA (document global)
 
 - **Fichier** : [app/pages/calendrier.py](app/pages/calendrier.py)
-- **Ligne** : 133
+- **Ligne** : 148
 - **Date** : 23.02.2026
 - **Description** : Aide IA pour normalisation des événements avec champs supplémentaires
 - **Détail** : Extension avec classe, examen et lien source pour affichage unifié
 
 - **Fichier** : [app/pages/calendrier.py](app/pages/calendrier.py)
-- **Ligne** : 325
+- **Ligne** : 431
 - **Date** : 19.02.2026
 - **Description** : Aide IA pour appel API sans identifiant utilisateur côté client
 - **Détail** : Suppression pilotée côté serveur avec contrôle d'autorisation
 
 - **Fichier** : [app/pages/calendrier.py](app/pages/calendrier.py)
-- **Ligne** : 348
+- **Ligne** : 469
 - **Date** : 19.02.2026
 - **Description** : Aide IA pour suppression pilotée serveur avec contrôle d'autorisation
 
 - **Fichier** : [app/pages/calendrier.py](app/pages/calendrier.py)
-- **Ligne** : 524
+- **Ligne** : 647
 - **Date** : 23.02.2026
 - **Description** : Aide IA pour affichage prof (classe, branche, moyenne élève, méta examen)
 - **Détail** : Affichage contextualisé des événements selon le rôle et les permissions
 
 - **Fichier** : [app/pages/calendrier.py](app/pages/calendrier.py)
-- **Ligne** : 575
+- **Ligne** : 701
 - **Date** : 26.02.2026
 - **Description** : Aide IA pour protections UI élève pour devoirs partagés
 - **Détail** : Masquage des boutons supprimer/modifier pour événements partagés
@@ -134,7 +136,7 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 
 ### 8. Pages Frontend - Partage des devoirs d'élèves
 - **Fichier** : [app/pages/formulaire.py](app/pages/formulaire.py)
-- **Ligne** : 809+
+- **Ligne** : 861+
 - **Date** : 01.04.2026
 - **Description** : Aide IA pour partage des devoirs d'élèves avec les autres élèves de leur classe
 - **Détail** : Quand un élève crée un devoir, celui-ci est automatiquement partagé avec les autres élèves de la même classe via un événement source et des événements liés
@@ -143,7 +145,7 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 
 ### 9. Pages Frontend - Propagation des mises à jour
 - **Fichier** : [app/pages/formulaire.py](app/pages/formulaire.py)
-- **Ligne** : 783
+- **Ligne** : 830
 - **Date** : 01.04.2026
 - **Description** : Aide IA pour propagation des mises à jour des devoirs d'élèves à tous les élèves de la classe
 - **Détail** : Quand un élève modifie un devoir, les modifications sont propagées à tous les autres élèves de sa classe (propagate_to_linked=True)
@@ -152,7 +154,7 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 
 ### 10. Enregistrement de l'historique des changements de classe
 - **Fichier** : [app/pages/profil_eleve.py](app/pages/profil_eleve.py)
-- **Ligne** : 285
+- **Ligne** : 318
 - **Date** : 01.04.2026
 - **Description** : Aide IA pour enregistrement du changement de classe dans la BD pour traçabilité historique
 - **Détail** : Chaque changement de classe d'un élève est enregistré dans la table `EleveChangementClasse` avec date pour une traçabilité complète
@@ -161,7 +163,7 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 
 ### 11. Validation stricte du temps passé (heures/minutes)
 - **Fichier** : [app/database/calendar_repository.py](app/database/calendar_repository.py)
-- **Ligne** : 386
+- **Ligne** : 481
 - **Date** : 01.04.2026
 - **Description** : Aide IA pour normalisation stricte du temps passé (`normalize_time_spent_strict`)
 - **Détail** : Le backend n'accepte plus que les formats `min`, `h`, `h+min` et normalise le stockage
@@ -182,7 +184,7 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 
 ### 12. Synchronisation automatique avant affichage calendrier
 - **Fichier** : [app/pages/calendrier.py](app/pages/calendrier.py)
-- **Ligne** : 201
+- **Ligne** : 216
 - **Date** : 01.04.2026
 - **Description** : Aide IA pour synchroniser les devoirs de classe avant rendu du calendrier élève
 - **Détail** : Vérification immédiate des devoirs liés à la classe actuelle à l'ouverture de la page
@@ -345,11 +347,20 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 
 ---
 
+### 19. Mise à jour du registre d'utilisation de l'IA
+- **Fichier** : [AI_USAGE.md](AI_USAGE.md)
+- **Ligne** : 1+
+- **Date** : 05.04.2026
+- **Description** : Aide IA pour mise à jour du registre des usages (références, lignes, date de révision)
+- **Détail** : harmonisation des entrées existantes avec l'état actuel du code et ajout de la date de mise à jour du document
+
+---
+
 ## Statistiques
-- **Nombre total d'utilisations d'IA documentées** : ~53 références
-- **Fichiers concernés** : 17
+- **Nombre total d'utilisations d'IA documentées** : ~54 références
+- **Fichiers concernés** : 18
 - **Domaines** : Backend sécurité, Modèles de données, Synchronisation calendrier, Frontend UI, Documentation
-- **Période** : 15.01.2026 - 04.04.2026
+- **Période** : 15.01.2026 - 05.04.2026
 
 ---
 
@@ -365,6 +376,7 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 | **01.04.2026** | Synchronisation élève-classe, validation stricte du temps passé, anti-doublons | `calendrier.py`, `calendar_repository.py`, `main.py`, `formulaire.py`, `profil_eleve.py` |
 | **04.04.2026** | Règles pédagogiques par année, robustesse classes (casse), persistance coche "fait", suppression de `Non attribué`, sync options/OS/OC, UX accueil/calendrier | `teacher_assignments.py`, `profil_professeur.py`, `formulaire.py`, `statistiques.py`, `charge_eleve.py`, `models.py`, `database.py`, `main.py`, `calendrier.py`, `calendar_repository.py`, `profil_eleve.py`, `accueil.py` |
 | **04.04.2026** | Rédaction de la documentation Sphinx, séparation des chapitres, réglage de la navigation et du plan | `presentation.md`, `manuel.md`, `code.md`, `critique.md`, `apprentissages.md`, `index.rst`, `conf.py` |
+| **05.04.2026** | Mise à jour du registre des usages IA (références + date de révision) | `AI_USAGE.md` |
 
 ---
 
