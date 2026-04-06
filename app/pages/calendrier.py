@@ -234,7 +234,7 @@ def create():
         finally:
             db.close()
     
-    # Load teacher's subjects if teacher
+    # Charger les branches de l'enseignant si l'utilisateur est enseignant
     teacher_subjects: set[str] = set()
     if is_teacher:
         db = get_db()
@@ -243,14 +243,14 @@ def create():
             if user:
                 enseignant = db.query(Enseignant).filter(Enseignant.utilisateur_id == user.id).first()
                 if enseignant and enseignant.branches:
-                    # Parse branches to extract subject names
+                    # Analyser les branches pour extraire les noms de matière
                     for token in enseignant.branches.split(','):
                         token = token.strip()
                         if '||' in token:
                             subject, _ = split_choice_token(token)
                             teacher_subjects.add(subject.lower())
                         else:
-                            # Handle legacy format or simple subject names
+                            # Gérer le format historique ou les noms de matière simples
                             teacher_subjects.add(token.lower())
         finally:
             db.close()
@@ -263,6 +263,7 @@ def create():
         event_date = event['date_obj']
         events_by_date.setdefault(event_date, []).append(event)
 
+    # Charge prévisionnelle affichée sur 7 jours à partir d'aujourd'hui.
     workload_window_days = 7
     workload_target_minutes = 18 * 60
     workload_total_minutes = 0
@@ -279,6 +280,7 @@ def create():
         workload_target_minutes,
     )
 
+    # Fenêtre d'affichage: historique limité + futur étendu jusqu'au dernier événement connu.
     start_date = date.today()
     visible_days = 5
     past_days_pool = 30
@@ -304,6 +306,7 @@ def create():
     css_path = Path(__file__).resolve().parents[1] / 'static' / 'css' / 'custom.css'
     css_version = int(css_path.stat().st_mtime) if css_path.exists() else 0
     ui.add_head_html(f'<link rel="stylesheet" href="/static/css/custom.css?v={css_version}">')
+    # Scripts JS utilitaires pour garder l'interface réactive sans rechargement complet.
     ui.add_head_html('''
         <script>
             window.updateWorkloadBar = function(deltaMinutes) {
@@ -609,6 +612,7 @@ def create():
                                 day_events,
                                 key=lambda item: 0 if item.get('type') == 'devoir' else 1,
                             )
+                            # Afficher d'abord les devoirs puis les examens pour une lecture plus stable.
 
                             with ui.column().classes('homework-list-container'):
                                 average_cache: dict[tuple[str, str, str, str, str, str, str], str] = {}
@@ -687,7 +691,7 @@ def create():
                                             if exam_meta_parts:
                                                 exam_info_html = f'<div class="time-info">{" • ".join(exam_meta_parts)}</div>'
                                         time_spent_row_html = f'<div class="time-info time-spent-row">Temps moyen par élève : {escape(average_cache[average_key])}</div>'
-                                        # Only show management actions if teacher teaches this subject
+                                        # Afficher les actions de gestion uniquement si l'enseignant donne cette matière
                                         event_subject_lower = event.get('subject', '').lower()
                                         can_delete = event_subject_lower in teacher_subjects
                                         if can_delete:

@@ -144,6 +144,7 @@ async def api_update_calendar_time_spent(payload: dict = Body(...)):
 
 @app.post('/api/calendar-events/done')
 async def api_update_calendar_done(payload: dict = Body(...)):
+    # Met à jour l'état fait/non fait d'un événement du calendrier pour l'utilisateur connecté.
     event_id = int(payload.get('event_id', 0))
     is_done = bool(payload.get('is_done', False))
     if event_id <= 0:

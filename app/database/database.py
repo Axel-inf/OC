@@ -3,17 +3,19 @@ from sqlalchemy.orm import sessionmaker, Session
 from config.settings import DATABASE_URL
 from database.models import Base
 
+# Moteur SQLAlchemy principal et fabrique de sessions partagées.
 engine = create_engine(DATABASE_URL, echo=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_database():
     """Initialise la base de données"""
+    # Crée les tables connues par les modèles puis applique les migrations légères.
     Base.metadata.create_all(bind=engine)
     _ensure_calendar_event_columns()
 
 
 def _ensure_calendar_event_columns() -> None:
-    # Aide IA: migrations légères pour colonnes ajoutées sans outil externe de migration
+    # Aide IA: migrations légères (une migration = modification de la structure de la base, ex: ajout d'une colonne) sans outil externe
     inspector = inspect(engine)
     table_names = inspector.get_table_names()
     if 'calendar_events' not in table_names:
@@ -21,6 +23,7 @@ def _ensure_calendar_event_columns() -> None:
 
     columns = {column['name'] for column in inspector.get_columns('calendar_events')}
     
+    # Vérification idempotente: chaque colonne n'est ajoutée que si elle n'existe pas déjà.
     with engine.begin() as connection:
         if 'is_hidden' not in columns:
             connection.execute(text('ALTER TABLE calendar_events ADD COLUMN is_hidden BOOLEAN NOT NULL DEFAULT 0'))

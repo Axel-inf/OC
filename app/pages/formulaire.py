@@ -608,7 +608,7 @@ def create(edit_event_id: int | None = None):
                         date_rendu = create_date_picker('Date de rendu', prefill_date)
                         
                         temps_estime = ui.input(
-                            'Temps passé',
+                            'Temps estimé',
                             placeholder='Ex: 1h30',
                             value=(edit_event.get('estimated_time', '') if edit_event and edit_event.get('type') == 'devoir' else ''),
                         ).props('outlined').classes('w-full q-mb-md')
