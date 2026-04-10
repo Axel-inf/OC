@@ -2,7 +2,7 @@
 
 Ce document liste toutes les utilisations d'IA générative détectées dans le projet, selon les consignes du cours.
 
-Dernière mise à jour du registre : 06.04.2026
+Dernière mise à jour du registre : 10.04.2026
 
 ## Format de documentation
 Chaque utilisation d'IA générative est documentée directement dans le code source avec le format suivant :
@@ -377,11 +377,20 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 
 ---
 
+### 21. Mise à jour du registre avec cette conversation
+- **Fichier** : [AI_USAGE.md](AI_USAGE.md)
+- **Ligne** : 1+
+- **Date** : 10.04.2026
+- **Description** : Aide IA pour inclure explicitement cette conversation dans le registre d'utilisation
+- **Détail** : ajout d'une entrée de traçabilité liée à la demande utilisateur de mise à jour du document
+
+---
+
 ## Statistiques
-- **Nombre total d'utilisations d'IA documentées** : ~57 références
+- **Nombre total d'utilisations d'IA documentées** : ~58 références
 - **Fichiers concernés** : 18
 - **Domaines** : Backend sécurité, Modèles de données, Synchronisation calendrier, Frontend UI, Documentation
-- **Période** : 15.01.2026 - 06.04.2026
+- **Période** : 15.01.2026 - 10.04.2026
 
 ---
 
@@ -399,6 +408,7 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 | **04.04.2026** | Rédaction de la documentation Sphinx, séparation des chapitres, réglage de la navigation et du plan | `presentation.md`, `manuel.md`, `code.md`, `critique.md`, `apprentissages.md`, `index.rst`, `conf.py` |
 | **05.04.2026** | Mise à jour du registre des usages IA (références + date de révision) | `AI_USAGE.md` |
 | **06.04.2026** | Ajout des références IA, clarification critique et harmonisation du rendu technique dans la documentation | `online.bib`, `code.md`, `critique.md`, `AI_USAGE.md` |
+| **10.04.2026** | Mise à jour du registre pour inclure cette conversation | `AI_USAGE.md` |
 
 ---
 
