@@ -15,3 +15,5 @@ __pycache__/
 instance/
 *.db
 .nicegui/
+docs/build/
+docs/.venv/

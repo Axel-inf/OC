@@ -34,7 +34,7 @@ source venv/bin/activate
 ### 3. Installer les dépendances
 
 ```bash
-pip install -r requirements.txt
+pip install -r app/requirements.txt
 ```
 
 ### 4. Configuration
@@ -69,16 +69,12 @@ Pour une première prise en main sur une machine inconnue, le plus simple est de
 
 ### 5. Initialiser la base de données
 
-```bash
-python -c "from database.database import init_database; init_database()"
-```
-
-Cette étape est optionnelle si vous lancez directement `python main.py`, car le démarrage de l'application initialise déjà la base de données automatiquement.
+Cette étape est optionnelle: le démarrage de l'application initialise déjà la base de données automatiquement.
 
 ## 🎯 Lancement de l'application
 
 ```bash
-python main.py
+python run.py
 ```
 
 L'application sera accessible sur : [http://localhost:8080](http://localhost:8080)
@@ -117,63 +113,106 @@ Ou naviguez vers `docs/Readme.md` dans l'explorateur VS Code.
 **Option 2 : Construire la documentation Sphinx (HTML)**
 ```bash
 cd docs
-pip install -r requirements.txt  # Installer les dépendances Sphinx si nécessaire
+python -m pip install -r requirements.txt  # Installer les dépendances Sphinx si nécessaire
 make html                        # Linux/Mac
-# ou sur Windows:
-make.bat html
+# ou, sur Windows si vous n'avez pas GNU Make:
+python -m sphinx -M html source build
 ```
 Puis ouvrez `docs/build/html/index.html` dans votre navigateur.
+
+Si vous obtenez encore `sphinx-build: not found`, lancez directement la génération via Python :
+```bash
+python -m sphinx -M html source build
+```
+depuis le dossier `docs/`.
 
 **Option 3 : Consultation directe des sources**
 - Les fichiers source se trouvent dans `docs/source/`
 
+**Option 4 : Ouvrir la doc en localhost (recommandé)**
+1. Générez d'abord la doc HTML :
+```bash
+cd docs
+make html
+```
+2. Lancez un serveur local depuis le dossier HTML généré :
+```bash
+# WSL / Linux / Mac
+cd docs/build/html
+python3 -m http.server 8000
+
+# Windows (PowerShell / CMD)
+cd docs\\build\\html
+python -m http.server 8000
+```
+3. Ouvrez ensuite : http://localhost:8000
+
+Cette méthode évite toute publication externe et reste idéale pour les tests locaux.
+
 ## �📁 Structure du projet
 
 ```
-planification_devoirs/
+projet_info/
 │
-├── run.py                         # Point d'entrée racine
+├── run.py                          # Point d'entrée racine
 ├── README.md
 ├── AI_USAGE.md
 ├── app/
-│   ├── main.py                    # Application NiceGUI
-│   ├── requirements.txt           # Dépendances Python
+│   ├── __init__.py
+│   ├── main.py                     # Application NiceGUI
+│   ├── requirements.txt            # Dépendances Python de l'app
+│   ├── components/                 # Composants UI réutilisables
+│   │   ├── __init__.py
+│   │   ├── navbar.py
+│   │   ├── header.py
+│   │   └── cards.py
 │   ├── config/
-│   │   └── settings.py            # Paramètres de l'app
-│   ├── components/
-│   │   ├── navbar.py              # Barre de navigation
-│   │   ├── header.py              # En-tête
-│   │   └── cards.py               # Composants réutilisables
+│   │   ├── __init__.py
+│   │   └── settings.py             # Paramètres globaux
 │   ├── database/
-│   │   ├── database.py            # Connexion BD + init
-│   │   ├── models.py              # Modèles SQLAlchemy
-│   │   ├── calendar_repository.py # Accès événements calendrier
-│   │   ├── init_db.py             # Script d'initialisation BD
-│   │   └── seed_demo_data.py      # Données de démonstration
-│   ├── pages/
-│   │   ├── login.py
-│   │   ├── inscription.py
+│   │   ├── __init__.py
+│   │   ├── database.py             # Session/engine SQLAlchemy + init
+│   │   ├── models.py               # Modèles ORM
+│   │   ├── calendar_repository.py  # Requêtes calendrier
+│   │   ├── init_db.py
+│   │   └── seed_demo_data.py
+│   ├── pages/                      # Pages NiceGUI
+│   │   ├── __init__.py
 │   │   ├── accueil.py
 │   │   ├── calendrier.py
-│   │   ├── formulaire.py
 │   │   ├── charge_eleve.py
+│   │   ├── formulaire.py
+│   │   ├── inscription.py
+│   │   ├── login.py
 │   │   ├── profil_eleve.py
 │   │   ├── profil_professeur.py
 │   │   ├── reset_password.py
 │   │   └── statistiques.py
-│   ├── utils/
-│   │   ├── auth.py
-│   │   ├── date_helpers.py
-│   │   ├── school.py
-│   │   ├── teacher_assignments.py
-│   │   └── validators.py
 │   ├── static/
 │   │   ├── css/
 │   │   ├── images/
 │   │   └── js/
 │   ├── templates/
-│   └── tests/
-└── docs/                          # Documentation Sphinx
+│   │   └── base.html
+│   ├── tests/
+│   │   ├── __init__.py
+│   │   ├── test_models.py
+│   │   └── test_pages.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── auth.py
+│       ├── date_helpers.py
+│       ├── school.py
+│       ├── teacher_assignments.py
+│       └── validators.py
+└── docs/                           # Documentation Sphinx
+   ├── Makefile                    # Cibles de build Sphinx (si make est installé)
+   ├── Readme.md                   # Guide spécifique à la documentation
+   ├── requirements.txt            # Dépendances doc
+   ├── packages                    # Métadonnées/template de packaging doc
+   ├── source/                     # Sources .rst/.md
+   ├── latex-templates/            # Templates LaTeX pour génération PDF
+   └── build/html/                 # Sortie HTML générée
 ```
 
 ## 🎨 Fonctionnalités implémentées
@@ -201,31 +240,25 @@ planification_devoirs/
 ## 🔄 Prochaines étapes (Backend)
 
 ### À implémenter
-1. **Connexion réelle à la base de données**
-   - Remplacer les données simulées par des requêtes SQL
-   - Implémenter l'authentification complète
+1. **Sécuriser l'authentification et les sessions**
+   - Renforcer la gestion des sessions (expiration, invalidation à la déconnexion)
+   - Uniformiser les vérifications d'accès selon le rôle (élève/enseignant)
 
-2. **CRUD des devoirs et examens**
-   - Créer, lire, modifier, supprimer des devoirs
-   - Créer, lire, modifier, supprimer des examens
-   - Filtrage par classe, matière, options
+2. **Finaliser le CRUD complet des événements**
+   - Ajouter les routes/actions de modification et suppression avec validations métier
+   - Journaliser les opérations critiques (création, édition, suppression)
 
-3. **Calcul de charge de travail**
-   - Somme des temps estimés par jour/semaine
-   - Répartition du temps de révision
-   - Indicateur de surcharge (>3h/jour)
+3. **Améliorer la couche repository et les transactions**
+   - Centraliser les requêtes SQLAlchemy dans les repositories
+   - Encadrer les opérations sensibles par des transactions atomiques
 
-4. **Statistiques avancées**
-   - Précision des estimations (temps estimé vs réel)
-   - Charge de travail par matière
-   - Périodes les plus chargées
-   - Comparaison entre enseignants
+4. **Renforcer la qualité logicielle**
+   - Étendre les tests unitaires sur `database/`, `utils/` et `pages/`
+   - Ajouter des tests d'intégration pour les scénarios complets (login -> création -> consultation)
 
-5. **Fonctionnalités additionnelles**
-   - Réinitialisation mot de passe
-   - Modification du profil
-   - Notifications
-   - Export des données
+5. **Préparer le déploiement et l'exploitation**
+   - Ajouter une configuration de logs structurés (niveau, fichier, contexte utilisateur)
+   - Documenter les variables d'environnement de production et le mode debug
 
 ## 📝 Utilisation
 
@@ -262,7 +295,7 @@ Si vous voulez créer votre propre utilisateur, choisissez le rôle correspondan
 ### Lancer en mode développement
 
 ```bash
-python main.py
+python run.py
 ```
 
 Le mode rechargement automatique est activé par défaut.
@@ -289,11 +322,20 @@ Pour des styles globaux, utilisez `static/css/custom.css`.
 # Vérifier l'activation de l'environnement virtuel
 ```
 
+**ImportError `Sentinel` (typing_extensions) :**
+```bash
+# Depuis la racine du projet
+python -m pip install -U typing_extensions
+python -m pip install -r app/requirements.txt
+```
+
+Si l'erreur persiste, réinstallez les dépendances dans un environnement virtuel propre.
+
 **Base de données :**
 ```bash
 # Réinitialiser la base de données
 rm app.db
-python -c "from database.database import init_database; init_database()"
+python run.py
 ```
 
 **Port déjà utilisé :**

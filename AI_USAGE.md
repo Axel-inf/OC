@@ -2,7 +2,7 @@
 
 Ce document liste toutes les utilisations d'IA générative détectées dans le projet, selon les consignes du cours.
 
-Dernière mise à jour du registre : 10.04.2026
+Dernière mise à jour du registre : 14.04.2026
 
 ## Format de documentation
 Chaque utilisation d'IA générative est documentée directement dans le code source avec le format suivant :
@@ -386,11 +386,92 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 
 ---
 
+### 22. Correctifs d'environnement Python et documentation de build Sphinx
+- **Fichier** : [app/requirements.txt](app/requirements.txt)
+- **Ligne** : fin de fichier
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour corriger une incompatibilité `pydantic_core` / `typing_extensions`
+- **Détail** : ajout d'une contrainte `typing_extensions>=4.14.0` pour éviter l'erreur `cannot import name 'Sentinel'`
+
+- **Fichier** : [README.md](README.md)
+- **Ligne** : section Débogage
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour documenter la résolution de l'erreur `Sentinel` et les commandes de réparation
+- **Détail** : ajout d'un bloc de dépannage dédié à la mise à jour des dépendances Python
+
+- **Fichier** : [docs/Readme.md](docs/Readme.md)
+- **Ligne** : section Compilation HTML
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour rendre la compilation Sphinx indépendante de `make`
+- **Détail** : recommandation de `python -m sphinx -M html source build` avec `make livehtml` en option
+
+- **Fichier** : [.gitignore](.gitignore), [docs/.gitignore](docs/.gitignore)
+- **Ligne** : sections d'exclusion
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour aligner les fichiers ignorés avec les artefacts de documentation locaux
+- **Détail** : ajout des exclusions `docs/build/`, `docs/.venv/` et correction de la règle Sphinx dans `docs/.gitignore`
+
+---
+
+### 23. Cohérence de la documentation Sphinx (WSL, localhost, navigation et structure)
+- **Fichier** : [docs/Makefile](docs/Makefile)
+- **Ligne** : 1+
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour rendre les commandes `make` cohérentes sous WSL
+- **Détail** : choix automatique de l'interpréteur Python du venv docs et ajout d'une cible `tmpdf` compatible
+
+- **Fichier** : [README.md](README.md), [docs/Readme.md](docs/Readme.md)
+- **Ligne** : sections Documentation / Visualisation
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour clarifier les procédures locales de build et consultation de la doc
+- **Détail** : consignes unifiées WSL, localhost, génération HTML/PDF, et suppression des commandes ambiguës
+
+- **Fichier** : [docs/source/index.rst](docs/source/index.rst)
+- **Ligne** : toctree principal
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour ajuster la table des matières (chapitres retirés/restaurés)
+- **Détail** : retrait du chapitre 1, conservation de la bibliographie et cohérence du sommaire
+
+- **Fichier** : [docs/source/presentation.md](docs/source/presentation.md)
+- **Ligne** : section "9. État du projet"
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour remplacer la liste de captures d'écran par une liste d'améliorations
+- **Détail** : alignement de la section avec les améliorations backend mentionnées dans le README
+
+- **Fichier** : [docs/source/conf.py](docs/source/conf.py), [docs/source/_static/custom.css](docs/source/_static/custom.css), [docs/source/_static/custom.js](docs/source/_static/custom.js)
+- **Ligne** : configuration HTML / assets statiques
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour stabiliser la navigation latérale et corriger l'activation des sections en bas de page
+- **Détail** : réglages du thème, ancres MyST, ajout de CSS/JS custom, suppression de warnings et validation du build
+
+---
+
+### 24. Harmonisation finale des README et dépannage runtime
+- **Fichier** : [README.md](README.md)
+- **Ligne** : sections Installation / Lancement / Développement / Débogage
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour aligner les commandes de l'application avec la structure réelle du dépôt
+- **Détail** : utilisation de `app/requirements.txt`, passage de `python main.py` à `python run.py`, et simplification de la procédure d'initialisation BD
+
+- **Fichier** : [docs/Readme.md](docs/Readme.md)
+- **Ligne** : sections HTML/PDF + dépannage
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour clarifier l'exécution WSL et le dépannage PDF/apt
+- **Détail** : ajout des prérequis WSL explicites, procédure en cas d'erreur `Exit Code: 5`, et rappel de la cause d'échec `make tmpdf` quand le PDF est verrouillé
+
+- **Fichier** : [AI_USAGE.md](AI_USAGE.md)
+- **Ligne** : fin de document
+- **Date** : 14.04.2026
+- **Description** : Aide IA pour mise à jour du registre avec les derniers correctifs de documentation
+- **Détail** : ajout de la présente entrée de traçabilité
+
+---
+
 ## Statistiques
-- **Nombre total d'utilisations d'IA documentées** : ~58 références
-- **Fichiers concernés** : 18
+- **Nombre total d'utilisations d'IA documentées** : ~70 références
+- **Fichiers concernés** : 22
 - **Domaines** : Backend sécurité, Modèles de données, Synchronisation calendrier, Frontend UI, Documentation
-- **Période** : 15.01.2026 - 10.04.2026
+- **Période** : 15.01.2026 - 14.04.2026
 
 ---
 
@@ -409,6 +490,8 @@ Chaque utilisation d'IA générative est documentée directement dans le code so
 | **05.04.2026** | Mise à jour du registre des usages IA (références + date de révision) | `AI_USAGE.md` |
 | **06.04.2026** | Ajout des références IA, clarification critique et harmonisation du rendu technique dans la documentation | `online.bib`, `code.md`, `critique.md`, `AI_USAGE.md` |
 | **10.04.2026** | Mise à jour du registre pour inclure cette conversation | `AI_USAGE.md` |
+| **14.04.2026** | Correctifs documentation Sphinx (WSL/localhost), cohérence du sommaire, ajustements de contenu et stabilisation de la navigation latérale | `README.md`, `docs/Readme.md`, `docs/Makefile`, `index.rst`, `presentation.md`, `conf.py`, `custom.css`, `custom.js` |
+| **14.04.2026** | Harmonisation finale des README (commandes app/docs) et ajout des procédures de dépannage apt/PDF | `README.md`, `docs/Readme.md`, `AI_USAGE.md` |
 
 ---
 
